@@ -32,6 +32,7 @@ export default function SiteApp() {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [sitting, setSitting] = useState(false);
+  const [notesIn, setNotesIn] = useState(false); // banknote photos loaded (re-render the logo and cards with them)
 
   const selRef = useRef(sel), heroRef = useRef<Hero | null>(null);
   const rootRef = useRef<HTMLDivElement>(null), tipRef = useRef<HTMLDivElement>(null);
@@ -47,7 +48,7 @@ export default function SiteApp() {
       if ('requestIdleCallback' in window) idle = requestIdleCallback(run, { timeout: 800 }); else run();
     }, 1050);
     return () => { clearTimeout(timer); if (idle) cancelIdleCallback(idle); };
-  }, [engine, sel]);
+  }, [engine, sel, notesIn]);
 
   /* tapping a ball or note in the ring (or a button in the keyboard list) switches straight to that style */
   const choose = useCallback((p: Pick) => {
@@ -85,7 +86,7 @@ export default function SiteApp() {
   /* once the 3D engine is ready: remember it, and render a small 3D thumbnail for each design card */
   const onEngine = useCallback((e: Engine | null) => {
     setEngine(e);
-    if (e) setTimeout(() => { try { e.makeThumbs(DESIGNS, { W: 280, H: 240, zoom: 1.12 }, setThumbs); } catch (err) { console.error(err); } }, 600);
+    if (e) e.loadNotes().then(() => { setNotesIn(true); setTimeout(() => { try { e.makeThumbs(DESIGNS, { W: 280, H: 240, zoom: 1.12 }, setThumbs); } catch (err) { console.error(err); } }, 300); });
   }, []);
   /* the design cards switch between football legends, pool balls and money; the ring then shows that design's styles */
   const selectDesign = useCallback((id: string) => {

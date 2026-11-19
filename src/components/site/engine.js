@@ -71,14 +71,20 @@ function plainMat(hex, rough) { var k = hex + rough; return plainMats[k] || (pla
 function darkenHex(hex, f) { var c = parseInt(hex.slice(1), 16); function q(v) { v = Math.max(0, Math.min(255, Math.round(v * f))); return ('0' + v.toString(16)).slice(-2); } return '#' + q(c >> 16 & 255) + q(c >> 8 & 255) + q(c & 255); }
 function curInfo(cur) { if (typeof CURRENCIES !== 'undefined' && cur) for (var i = 0; i < CURRENCIES.length; i++) if (CURRENCIES[i].id === cur) return CURRENCIES[i]; return { sym: '$', paper: '#EFEACF', ink: '#3F6E4B' }; }
 /* photos of each currency's note (front, and back where there is one), loaded once before the engine starts */
-var noteImgs = {}, notesPromise = null;
+var noteImgs = {}, notesPromise = null, notesEarly = false, notesListeners = [];
 function loadNotes() {
   if (notesPromise) return notesPromise;
   notesPromise = Promise.all(CURRENCIES.map(function (c) {
     return Promise.all((c.img || []).map(function (src) {
       return new Promise(function (res) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { res(null); }; im.src = src; });
     })).then(function (list) { noteImgs[c.id] = list.filter(Boolean); });
-  }));
+  })).then(function () {
+    /* on a slow connection the beanbag may already be showing drawn stand-in notes: throw those away and redraw with the photos */
+    if (!notesEarly) return;
+    notesEarly = false; noteTexC = {};
+    [bagMatCache, clipCache].forEach(function (c) { Object.keys(c).forEach(function (k) { if (k.indexOf('$') >= 0) delete c[k]; }); });
+    notesListeners.forEach(function (fn) { try { fn(); } catch (e) { console.error(e); } });
+  });
   return notesPromise;
 }
 function noteImg(cur, i) { var l = noteImgs[cur]; return l && l.length ? l[(i || 0) % l.length] : null; }
@@ -93,6 +99,7 @@ function drawBill(g, x, y, w, h, cur, i) {
       g.save(); g.shadowColor = "transparent"; rr(x, ty, w, ah, ah * 0.03); g.clip(); g.drawImage(im, x, ty, w, ah); g.restore();
       return;
     }
+    if ((CI.img || []).length) notesEarly = true; // photo not here yet: draw a stand-in for now
     var dk = CI.ink, gr = g.createLinearGradient(x, y, x + w, y + h); gr.addColorStop(0, CI.paper); gr.addColorStop(1, darkenHex(CI.paper, 0.9));
     rr(x, y, w, h, h * 0.05); g.fillStyle = gr; g.fill();
     g.strokeStyle = dk; g.lineWidth = h * 0.035; rr(x + h * 0.05, y + h * 0.05, w - h * 0.1, h - h * 0.1, h * 0.03); g.stroke();
@@ -569,11 +576,19 @@ function initHero(stage, canvas, spec0, theme0) {
       var isMat = kind === 'mat'; floor.visible = isMat; floor.material.opacity = 0.55; glow.visible = isMat; shadowBlob.position.y = 0.003; shadowBlob.material.opacity = isMat ? 0.45 : 0.8; // on the hero only one soft shadow, centred under the beanbag (no hard cast shadow off to the side)
     }
     /* sitting: the seat sinks in with a little give (sinks slightly past, then settles), and rises back up when you stand */
-    var settle = 0, settleTo = 0;
+    var settle = 0, settleTo = 0, lastSpec = spec0;
+    /* the banknote photos arrived after the beanbag was built: rebuild whatever shows money */
+    function onNotes() {
+      if (disposed) return;
+      if (sw.active && !sw.swapped) { if (sw.next.patch === 'dollar') { if (sw.model) disposeGroup(sw.model); sw.model = buildModel(sw.next); } }
+      else if (lastSpec.patch === 'dollar') install(lastSpec);
+      if (propsKey === 'notes') buildProps(lastSpec.id);
+    }
+    notesListeners.push(onNotes);
     function sitAmount() { return settleTo > 0 ? backOut(settle, 1.3) : settle * settle * (3 - 2 * settle); }
     function sitShape() { var ms = current && current.userData.morphs; if (ms) { var v = sitAmount(); ms.forEach(function (m) { if (v > 0 || m.base) applySit(m, v); }); } }
     function set(s, designChanged, th) {
-      selKey = specKey(s);
+      selKey = specKey(s); lastSpec = s;
       var nextProps = byId(DESIGNS, s.id).props;
       if (!designChanged || reduce) { install(s); if (designChanged) { baseRot = byId(DESIGNS, s.id).rot || 0; userRot = 0; } if (nextProps !== propsKey) buildProps(s.id); setTheme(th, reduce); return; }
       var model = buildModel(s);
@@ -716,7 +731,7 @@ function initHero(stage, canvas, spec0, theme0) {
     if (reduce) renderer.render(scene, camera);
     start();
     function dispose() {
-      if (disposed) return; disposed = true; stop(); clearTimeout(warmTimer); clearTimeout(compileTimer); warmToken++;
+      if (disposed) return; disposed = true; notesListeners = notesListeners.filter(function (f) { return f !== onNotes; }); stop(); clearTimeout(warmTimer); clearTimeout(compileTimer); warmToken++;
       if (ro) ro.disconnect(); else window.removeEventListener('resize', resize);
       if (io) io.disconnect();
       document.removeEventListener('visibilitychange', onVis);
