@@ -6,7 +6,7 @@ import {
   type Pick, type Selection,
 } from './data';
 import Stage, { type Anchor, type Engine, type Hero } from './Stage';
-import OrderSection from './OrderSection';
+import OrderSection, { lineKey, MAX_EACH, type Line } from './OrderSection';
 import { FabricPills } from './controls';
 import K4Viewer, { type K4Request } from '../shared/K4Viewer';
 import SmoothScroll, { scrollToId } from '../motion/SmoothScroll';
@@ -32,6 +32,9 @@ export default function SiteApp() {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [sitting, setSitting] = useState(false);
+  const [basket, setBasket] = useState<Line[]>([]); // every style the visitor wants, with how many of each
+  const [added, setAdded] = useState<string | null>(null); // short confirmation after adding a style
+  const addedTimer = useRef(0);
   const [notesIn, setNotesIn] = useState(false); // banknote photos loaded (re-render the logo and cards with them)
 
   const selRef = useRef(sel), heroRef = useRef<Hero | null>(null);
@@ -98,6 +101,24 @@ export default function SiteApp() {
   }, []);
   const getInitial = useCallback(() => ({ spec: specOf(selRef.current), theme: themeOf(selRef.current) }), []);
 
+  /* put the beanbag showing at the top into the order (one more of it if it is already there) */
+  function addToOrder() {
+    const s = selRef.current, key = lineKey(s);
+    let img: string | null = null;
+    try { img = engine ? engine.snapBag(specOf(s), 240, 240) : null; } catch (e) { console.error(e); }
+    setBasket((b) => {
+      const i = b.findIndex((l) => l.key === key);
+      if (i < 0) return [...b, { key, sel: s, qty: 1, img }];
+      return b.map((l, j) => (j === i ? { ...l, qty: Math.min(MAX_EACH, l.qty + 1) } : l));
+    });
+    setAdded(designName(s));
+    clearTimeout(addedTimer.current); addedTimer.current = window.setTimeout(() => setAdded(null), 3200);
+  }
+  const setLineQty = (key: string, qty: number) => setBasket((b) => b.map((l) => (l.key === key ? { ...l, qty: Math.max(1, Math.min(MAX_EACH, qty)) } : l)));
+  const removeLine = (key: string) => setBasket((b) => b.filter((l) => l.key !== key));
+  const count = basket.reduce((n, l) => n + l.qty, 0);
+  useEffect(() => () => clearTimeout(addedTimer.current), []);
+
   function open4K() {
     if (!engine) return;
     setK4({ spec: specOf(selRef.current), label: designName(selRef.current), render: engine.renderStudio as K4Request['render'] });
@@ -111,7 +132,7 @@ export default function SiteApp() {
       <div id="progress" aria-hidden="true" />
       <header className="header" id="top">
         <a className="logo" href="#home" aria-label="Oro, back to the top" onClick={go('home')}><OroMark icon={shot} /></a>
-        <a className="contact-btn" href="#order" onClick={go('order')}>Order now</a>
+        <a className="contact-btn" href="#order" onClick={go('order')}>{count ? <>Your order <span className="count" aria-label={count + ' beanbags'}>{count}</span></> : 'Order now'}</a>
       </header>
 
       <main>
@@ -151,7 +172,7 @@ export default function SiteApp() {
                 </div>
                 <div className="btnrow">
                   <Magnet padding={70} magnetStrength={4} maxOffset={12}>
-                    <a className="primary-btn" href="#order" onClick={go('order')}>Order this beanbag<span className="plus" aria-hidden="true">+</span></a>
+                    <button type="button" className="primary-btn" onClick={addToOrder}>Add to order<span className="plus" aria-hidden="true">+</span></button>
                   </Magnet>
                   <button type="button" className="ghost-btn" aria-pressed={sitting} onClick={() => { if (heroRef.current) setSitting(heroRef.current.toggleSit()); }}>{sitting ? 'Stand up' : 'Sit on it'}</button>
                   <button type="button" className="ghost-btn" onClick={open4K}>View in 4K</button>
@@ -179,10 +200,13 @@ export default function SiteApp() {
           />
         </div>
 
-        <OrderSection sel={sel} shot={shot} />
+        <OrderSection sel={sel} shot={shot} basket={basket} onAdd={addToOrder} onQty={setLineQty} onRemove={removeLine} onClear={() => setBasket([])} />
       </main>
 
       <K4Viewer request={k4} onClose={() => setK4(null)} />
+      <div className="added-toast" role="status" aria-live="polite" data-show={added ? '' : undefined}>
+        {added && <>Added {added} · {count} {count === 1 ? 'beanbag' : 'beanbags'} in your order <a href="#order" onClick={go('order')}>View order</a></>}
+      </div>
     </div>
   );
 }

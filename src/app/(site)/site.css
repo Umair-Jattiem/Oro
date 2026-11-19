@@ -416,3 +416,23 @@ html.lenis{scroll-behavior:auto}
 .fall-note{position:absolute;top:-60px;border-radius:3px;box-shadow:0 4px 10px rgba(0,0,0,.35),inset 0 0 0 2px rgba(0,0,0,.12);animation:note-fall linear forwards}
 @keyframes note-fall{0%{transform:translate(0,0) rotate(0)}100%{transform:translate(60px,110vh) rotate(var(--spin,180deg))}}
 @media (prefers-reduced-motion:reduce){.bd-sun{animation:none}}
+
+/* ---------- order with several styles ---------- */
+.contact-btn .count{display:inline-grid;place-items:center;min-width:1.5em;height:1.5em;margin-left:.45em;padding:0 .35em;border-radius:999px;background:var(--rose);color:var(--ink);font-size:.8rem;font-weight:800}
+.basket{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;outline:none}
+.basket li{display:grid;grid-template-columns:56px 1fr auto auto;align-items:center;gap:12px;padding:8px 10px 8px 8px;border-radius:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+.basket img,.basket .b-ph{width:56px;height:56px;border-radius:12px;object-fit:contain;background:radial-gradient(circle at 50% 45%,rgba(255,255,255,.14),rgba(255,255,255,.03) 70%)}
+.b-name{min-width:0;font-size:.82rem;line-height:1.35;color:rgba(255,255,255,.7)}
+.b-name b{display:block;font-size:.98rem;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.basket .qty button{width:34px;height:34px;font-size:1.05rem}
+.basket .qty output{min-width:26px}
+.b-x{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:transparent;color:#fff;font-size:1.2rem;line-height:1;cursor:pointer}
+.b-x:hover{background:rgba(255,255,255,.12)}
+.b-line{display:block}
+.op-in{margin:0;font:700 .9rem var(--display);color:var(--rose)}
+.op-add{align-self:flex-start}
+.added-toast{position:fixed;left:50%;bottom:24px;z-index:300;transform:translate(-50%,20px);opacity:0;pointer-events:none;max-width:calc(100vw - 32px);padding:12px 18px;border-radius:999px;background:rgba(20,10,26,.88);color:#fff;font:600 .9rem/1.4 var(--display);border:1px solid rgba(255,255,255,.18);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);transition:opacity .25s,transform .25s;text-align:center}
+.added-toast[data-show]{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.added-toast a{color:var(--rose);margin-left:.5em;font-weight:800}
+@media (max-width:520px){.basket li{grid-template-columns:48px 1fr auto;row-gap:8px}.basket img,.basket .b-ph{width:48px;height:48px}.basket li .qty{grid-column:2}.b-x{grid-column:3;grid-row:1}}
+@media (prefers-reduced-motion:reduce){.added-toast{transition:none}}
