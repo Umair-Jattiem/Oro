@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  DESIGNS, INITIAL_SELECTION, byId, designName, pickLabel, picksFor, specOf, themeOf,
+  DESIGNS, INITIAL_SELECTION, byId, curOf, designName, pickLabel, picksFor, sceneOf, specOf, themeOf,
   type Pick, type Selection,
 } from './data';
 import Stage, { type Engine, type Hero } from './Stage';
@@ -14,6 +14,7 @@ import { useSiteMotion } from './useSiteMotion';
 import ScrollVelocity from '../react-bits/ScrollVelocity';
 import Magnet from '../react-bits/Magnet';
 import OroMark from './OroMark';
+import Backdrop from './Backdrop';
 
 /* which design a ring item belongs to, and whether it is the one showing */
 const designFor = (p: Pick) => (p.player ? 'legend' : p.ball ? 'ols01' : 'dollar');
@@ -105,7 +106,8 @@ export default function SiteApp() {
 
       <main>
         <section className="hero2" id="home">
-          <Bubbles />
+          <Backdrop {...sceneOf(sel)} />
+          <Particles kind={d.variant === 'cur' ? 'notes' : 'dust'} color={curOf(sel).paper} />
           <Stage hint={d.variant === 'player' ? 'Tap a ball to change player · drag to spin' : d.variant === 'ball' ? 'Tap a ball to change colour · drag to spin' : 'Tap a note to change currency · drag to spin'} getInitial={getInitial} onHero={onHero} onPick={choose} onEngine={onEngine} onHover={onHover} />
           <div className="ring-tip" ref={tipRef} hidden aria-hidden="true" />
           <div className="hero-in">
@@ -174,8 +176,9 @@ export default function SiteApp() {
   );
 }
 
-/* rising bubbles behind the hero (skipped with reduced motion, paused when off screen) */
-function Bubbles() {
+/* themed particles over the backdrop: drifting light dust (stadium, court, pool hall) or banknotes falling
+   in the chosen currency's colour (vault). Skipped with reduced motion, paused when off screen. */
+function Particles({ kind, color }: { kind: 'dust' | 'notes'; color: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const host = ref.current;
@@ -188,15 +191,26 @@ function Bubbles() {
     const timers: number[] = [];
     const id = window.setInterval(() => {
       if (document.hidden || !vis) return;
-      const b = document.createElement('span'), sz = rand(10, 30), dur = rand(4, 10);
-      b.className = 'bub';
-      b.style.width = b.style.height = sz.toFixed(0) + 'px';
-      b.style.left = rand(0, 100).toFixed(1) + '%';
-      b.style.animationDuration = dur.toFixed(1) + 's';
-      host.appendChild(b);
-      timers.push(window.setTimeout(() => b.remove(), dur * 1000 + 60));
-    }, 400);
+      const p = document.createElement('span');
+      const dur = kind === 'notes' ? rand(7, 12) : rand(6, 11);
+      if (kind === 'notes') {
+        const wpx = rand(26, 48);
+        p.className = 'fall-note';
+        p.style.width = wpx.toFixed(0) + 'px'; p.style.height = (wpx * 0.45).toFixed(0) + 'px';
+        p.style.background = color;
+        p.style.setProperty('--spin', rand(-260, 260).toFixed(0) + 'deg');
+        p.style.opacity = rand(0.35, 0.75).toFixed(2);
+      } else {
+        const sz = rand(2, 6);
+        p.className = 'dust';
+        p.style.width = p.style.height = sz.toFixed(1) + 'px';
+      }
+      p.style.left = rand(0, 100).toFixed(1) + '%';
+      p.style.animationDuration = dur.toFixed(1) + 's';
+      host.appendChild(p);
+      timers.push(window.setTimeout(() => p.remove(), dur * 1000 + 60));
+    }, kind === 'notes' ? 520 : 260);
     return () => { clearInterval(id); timers.forEach(clearTimeout); io?.disconnect(); host.replaceChildren(); };
-  }, []);
+  }, [kind, color]);
   return <div className="bubbles" ref={ref} aria-hidden="true" />;
 }

@@ -411,10 +411,11 @@ var ballTexCache = {};
 function ballTex(n, hex) {
     var k = n + hex; if (ballTexCache[k]) return ballTexCache[k];
     return (ballTexCache[k] = canvasTex(512, 256, function (g, w, h) {
-      g.fillStyle = hex; g.fillRect(0, 0, w, h);
+      if (n >= 9) { g.fillStyle = '#F7F6F2'; g.fillRect(0, 0, w, h); g.fillStyle = hex; g.fillRect(0, h * 0.27, w, h * 0.46); } // 9-15 are striped
+      else { g.fillStyle = hex; g.fillRect(0, 0, w, h); }
       [128, 384].forEach(function (cx) {
         g.fillStyle = '#F7F6F2'; g.beginPath(); g.arc(cx, 128, 64, 0, 7); g.fill();
-        g.fillStyle = '#121212'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '800 84px Manrope, "Arial Black", Arial, sans-serif'; g.fillText(String(n), cx, 134);
+        g.fillStyle = '#121212'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '800 ' + (n >= 10 ? 70 : 84) + 'px Manrope, "Arial Black", Arial, sans-serif'; g.fillText(String(n), cx, 134);
       });
     }));
   }
@@ -528,7 +529,7 @@ function initHero(stage, canvas, spec0, theme0) {
       propsKey = d.props; bornAt = performance.now();
       for (var i = 0; i < n; i++) {
         var g = makeProp(list[i]); g.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3)); g.scale.setScalar(0.001); propsG.add(g);
-        props.push({ g: g, a: -Math.PI * 0.5 + (i + 0.5) / n * Math.PI * 2, s: g.userData.base * 0.9, cs: 0, delay: (first ? 700 : 0) + i * 70, spin: rand(0.25, 0.6), ph: rand(0, 6.28), key: pickKey(g.userData.pick) });
+        props.push({ g: g, a: -Math.PI * 0.5 + (i + 0.5) / n * Math.PI * 2, s: g.userData.base * (n <= 3 ? 1.2 : 0.9), cs: 0, delay: (first ? 700 : 0) + i * 70, spin: rand(0.25, 0.6), ph: rand(0, 6.28), key: pickKey(g.userData.pick) });
       }
     }
     /* fit the ring on screen: beside the text on wide screens, centred on tablets and phones */
@@ -801,9 +802,13 @@ function fabricDetail(fabric) {
     var t = fabricBump(fabric, W, H);
     return (fabricDetailCache[fabric] = { map: map, bump: t });
   }
-function colourTex(hex, kit) {
-    var key = kit ? 'kit|' + kit.id : hex; if (colourCache[key]) return colourCache[key];
-    var t = canvasTex(kit ? 1024 : 4, kit ? 512 : 2, function (g, w, h) { g.fillStyle = hex; g.fillRect(0, 0, w, h); if (kit) drawKitFabric(g, w, h, kit); });
+function colourTex(hex, kit, stripe) {
+    var key = kit ? 'kit|' + kit.id : stripe ? 'stripe|' + hex : hex; if (colourCache[key]) return colourCache[key];
+    var big = kit || stripe;
+    var t = canvasTex(big ? 1024 : 4, big ? 512 : 2, function (g, w, h) {
+      if (stripe) { g.fillStyle = '#F2EEE6'; g.fillRect(0, 0, w, h); g.fillStyle = hex; g.fillRect(0, h * 0.3, w, h * 0.34); return; } // striped pool ball: white with a coloured band round the middle
+      g.fillStyle = hex; g.fillRect(0, 0, w, h); if (kit) drawKitFabric(g, w, h, kit);
+    });
     t.wrapS = T.RepeatWrapping;
     return (colourCache[key] = t);
   }
@@ -818,11 +823,11 @@ function fabricBump(fabric, W, H) {
     bump.wrapS = T.RepeatWrapping;
     return bump;
   }
-function fabricMat(hex, fabric, size, kit) {
-    var key = (kit ? 'kit|' + kit.id : hex) + '|' + fabric; if (matCache[key]) return matCache[key];
+function fabricMat(hex, fabric, size, kit, stripe) {
+    var key = (kit ? 'kit|' + kit.id : stripe ? 'stripe|' + hex : hex) + '|' + fabric; if (matCache[key]) return matCache[key];
     var d = fabricDetail(fabric), cord = fabric === 'corduroy';
     var m = new T.MeshPhysicalMaterial({
-      map: colourTex(hex, kit), bumpMap: d.bump, bumpScale: cord ? 0.018 : 0.025, roughness: cord ? 0.92 : 0.86, metalness: 0, envMapIntensity: 0.38,
+      map: colourTex(hex, kit, stripe), bumpMap: d.bump, bumpScale: cord ? 0.018 : 0.025, roughness: cord ? 0.92 : 0.86, metalness: 0, envMapIntensity: 0.38,
       sheen: cord ? 0.55 : 0.65, sheenRoughness: 0.45, sheenColor: new T.Color(shade(hex, cord ? 0.16 : 0.26))
     });
     fabricDetailOf.set(m, d.map);
@@ -877,9 +882,9 @@ function capGeometryHQ(R, angle) {
   }
 var bagMatCache = {};
 function bagBodyMat(s) {
-    var dollar = s.patch === 'dollar', k = 'bag|' + (dollar ? '$' + (s.cur || 'USD') : s.kit ? 'kit|' + s.kit.id : s.hex) + '|' + s.fabric;
+    var dollar = s.patch === 'dollar', k = 'bag|' + (dollar ? '$' + (s.cur || 'USD') : s.kit ? 'kit|' + s.kit.id : (s.stripe ? 'stripe|' : '') + s.hex) + '|' + s.fabric;
     if (!bagMatCache[k]) {
-      var src = dollar ? dollarMat(s.fabric, s.cur) : fabricMat(s.hex, s.fabric, 0, s.kit), m = src.clone();
+      var src = dollar ? dollarMat(s.fabric, s.cur) : fabricMat(s.hex, s.fabric, 0, s.kit, s.stripe), m = src.clone();
       m.clippingPlanes = [clipPlane]; m.clipShadows = true; m.vertexColors = true; m.envMapIntensity = 0.38;
       bagMatCache[k] = addFibreDetail(m, fabricDetailOf.get(src));
     }
@@ -988,7 +993,7 @@ function warmStyles(renderer, fabric) {
   var token = ++warmToken, list = [], i = 0;
   ['players', 'balls', 'notes'].forEach(function (key) { PROPSETS[key].forEach(function (sp) {
     if (sp.kit) list.push({ id: 'legend', kind: 'dome', patch: 'kitpatch', hex: sp.kit.hex, fabric: fabric, kit: sp.kit });
-    else if (sp.t === 'ball') list.push({ id: 'ols01', kind: 'dome', patch: 'circle', hex: sp.hex, fabric: fabric, num: sp.n });
+    else if (sp.t === 'ball') list.push({ id: 'ols01', kind: 'dome', patch: 'circle', hex: sp.hex, fabric: fabric, num: sp.n, stripe: sp.stripe });
     else if (sp.t === 'note' && !small) list.push({ id: 'dollar', kind: 'dome', patch: 'dollar', hex: '#17503C', fabric: fabric, cur: sp.cur });
   }); });
   function upload(tex) { if (tex && renderer.initTexture) try { renderer.initTexture(tex); } catch (e) {} }
