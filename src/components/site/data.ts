@@ -1,0 +1,119 @@
+/* Products for the main site. Edit these lists to add or change designs, colours, players or currencies.
+   Players and their kit colours live in ../shared/kits.ts (shared with the room). */
+import { KITS, kitById, type Kit } from '../shared/kits';
+
+export type Colour = { id: string; name: string; hex: string };
+export type Fabric = { id: string; name: string };
+export type Design = {
+  id: string; code: string; name: string; kind: string; patch: string; colour: string; fabric: string;
+  status: string; tone: string; panel: string; rot: number; variant: 'player' | 'ball' | 'cur'; fixedColour?: boolean;
+  props: string; blurb: string;
+};
+export type Ball = { n: number; name: string; hex: string };
+export type Currency = { id: string; name: string; sym: string; paper: string; ink: string; theme: string };
+export type Pick = { player?: string; ball?: number; cur?: string };
+type Prop = { t: string; n?: number; hex?: string; cur?: string; kit?: Kit; pick?: Pick };
+type PropSet = Prop[] & { unique?: boolean };
+
+export const COLOURS: Colour[] = [
+  { id: 'black',     name: 'Black',      hex: '#141414' },
+  { id: 'chocolate', name: 'Chocolate',  hex: '#3A2218' },
+  { id: 'charcoal',  name: 'Charcoal',   hex: '#3A3D3F' },
+  { id: 'navy',      name: 'Navy',       hex: '#1F2A44' },
+  { id: 'oat',       name: 'Oat',        hex: '#CBC3B4' },
+  { id: 'sand',      name: 'Sand',       hex: '#B9A27A' },
+  { id: 'green',     name: 'Felt green', hex: '#17503C' },
+  { id: 'pink',      name: 'Blush pink', hex: '#E9A3BF' },
+];
+export const FABRICS: Fabric[] = [
+  { id: 'corduroy',   name: 'Corduroy' },
+  { id: 'microsuede', name: 'Microsuede' },
+];
+/* Three beanbags, each with its own picker:
+   variant 'player' = choose a football legend (kit colours, name and number),
+   variant 'ball'   = choose a pool ball (number and colour),
+   variant 'cur'    = choose a currency.
+   panel = card background; props = the floating objects around the hero (see PROPSETS). */
+export const DESIGNS: Design[] = [
+  { id: 'legend', code: 'OLS-10', name: 'Football legend', kind: 'dome', patch: 'kitpatch', colour: 'black', fabric: 'corduroy', status: 'Concept',    tone: 'concept', panel: '#F5CDB8', rot: -0.3, variant: 'player', fixedColour: true, props: 'players', blurb: 'Your favourite legend in their national colours, with their name and number on a round patch.' },
+  { id: 'ols01',  code: 'OLS-01', name: 'Pool ball',       kind: 'dome', patch: 'circle',   colour: 'black', fabric: 'corduroy', status: 'Concept',    tone: 'concept', panel: '#F4B8CF', rot: -0.3, variant: 'ball', props: 'balls', blurb: 'A corduroy beanbag styled as a pool ball, with the white circle and number.' },
+  { id: 'dollar', code: '',       name: 'Money print',     kind: 'dome', patch: 'dollar',   colour: 'green', fabric: 'corduroy', status: 'Idea stage', tone: 'idea',    panel: '#CFE6CB', rot: 0.2,  variant: 'cur', fixedColour: true, props: 'cash', blurb: 'A beanbag covered in a stylised banknote print, in the currency you choose.' },
+];
+export const BALLS: Ball[] = [
+  { n: 1, name: 'Yellow', hex: '#E2B020' }, { n: 2, name: 'Blue', hex: '#1F4FB4' }, { n: 3, name: 'Red', hex: '#C8302A' }, { n: 4, name: 'Purple', hex: '#5B2C83' },
+  { n: 5, name: 'Orange', hex: '#E06A1C' }, { n: 6, name: 'Green', hex: '#1D7A44' }, { n: 7, name: 'Maroon', hex: '#7A1F2B' }, { n: 8, name: 'Black', hex: '#141213' },
+];
+/* stylised notes in each currency's colour: original artwork, not copies of real banknotes */
+export const CURRENCIES: Currency[] = [
+  { id: 'ZAR', name: 'Rand',   sym: 'R', paper: '#ECDDC6', ink: '#7A4B2A', theme: '#B07A3C' },
+  { id: 'USD', name: 'Dollar', sym: '$', paper: '#EFEACF', ink: '#3F6E4B', theme: '#1A9A5E' },
+  { id: 'EUR', name: 'Euro',   sym: '€', paper: '#DDE6F2', ink: '#2F4F86', theme: '#2F6FC0' },
+  { id: 'GBP', name: 'Pound',  sym: '£', paper: '#EFD9DD', ink: '#7A2F45', theme: '#A8445F' },
+  { id: 'JPY', name: 'Yen',    sym: '¥', paper: '#E6E1F0', ink: '#4B3F75', theme: '#6A55A8' },
+];
+
+const players: PropSet = KITS.map((k) => ({ t: 'ball', kit: k, pick: { player: k.id } }));
+const balls: PropSet = BALLS.map((b) => ({ t: 'ball', n: b.n, hex: b.hex, pick: { ball: b.n } }));
+const cash: PropSet = [];
+CURRENCIES.forEach((c) => { cash.push({ t: 'note', cur: c.id, pick: { cur: c.id } }); cash.push({ t: 'coin', cur: c.id, pick: { cur: c.id } }); });
+players.unique = true; balls.unique = true; cash.unique = true;
+export const PROPSETS: Record<string, PropSet> = {
+  players, balls, cash,
+  lounge: [{ t: 'cord', hex: '#3A3D3F' }, { t: 'spark', hex: '#F4E2A8' }, { t: 'cord', hex: '#1F2A44' }, { t: 'cord', hex: '#CBC3B4' }, { t: 'spark', hex: '#FFFFFF' }],
+};
+
+export const PROVINCES = ['Eastern Cape', 'Free State', 'Gauteng', 'KwaZulu-Natal', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape', 'Western Cape'];
+export const CUSTOM_THEME: Theme = ['#55506e', '#26233a', '#0b0a14'];
+
+export function byId<T extends { id: string }>(list: T[], id: string): T {
+  for (let i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return list[0];
+}
+
+/* ---------- the current selection and what it means ---------- */
+export type Selection = { id: string; colour: string; fabric: string; player: string; ball: number; cur: string };
+export type Theme = [string, string, string];
+export type Spec = { id: string; kind: string; patch: string; hex: string; fabric: string; num?: number; cur?: string; kit?: Kit };
+
+export const INITIAL_SELECTION: Selection = { id: 'legend', colour: 'black', fabric: 'corduroy', player: 'messi', ball: 8, cur: 'USD' };
+
+export const playerOf = (s: Selection) => kitById(s.player);
+export const ballOf = (s: Selection) => BALLS[s.ball - 1] || BALLS[7];
+export const curOf = (s: Selection) => byId(CURRENCIES, s.cur);
+export const playerLabel = (k: Kit) => `${k.name} ${k.num} · ${k.team}`;
+
+/* label for the picker row: "Player: Messi 10 · Argentina", "Ball: Black 8", "Currency: Dollar" */
+export function variantLabel(s: Selection, d: Design = byId(DESIGNS, s.id)) {
+  if (d.variant === 'player') return 'Player: ' + playerLabel(playerOf(s));
+  if (d.variant === 'ball') return `Ball: ${ballOf(s).name} ${s.ball}`;
+  return 'Currency: ' + curOf(s).name;
+}
+
+export function designName(s: Selection, d: Design = byId(DESIGNS, s.id)) {
+  const k = playerOf(s);
+  if (d.id === 'legend') return `${k.name} ${k.num}`;
+  if (d.id === 'ols01') return 'Classic ' + s.ball + '-ball';
+  if (d.id === 'dollar') return curOf(s).name + ' print';
+  return d.name;
+}
+function shadeHex(hex: string, f: number) {
+  const c = parseInt(hex.slice(1), 16);
+  const h = (v: number) => ('0' + Math.max(0, Math.min(255, Math.round(v * f))).toString(16)).slice(-2);
+  return '#' + h((c >> 16) & 255) + h((c >> 8) & 255) + h(c & 255);
+}
+const themeFromHex = (hex: string): Theme => [shadeHex(hex, 0.78), shadeHex(hex, 0.36), shadeHex(hex, 0.1)];
+export function themeOf(s: Selection): Theme {
+  const d = byId(DESIGNS, s.id);
+  if (d.variant === 'player') return themeFromHex(playerOf(s).theme);
+  if (d.variant === 'ball') return s.ball === 8 ? ['#5b2a86', '#2a1245', '#0d0617'] : themeFromHex(ballOf(s).hex);
+  return themeFromHex(curOf(s).theme);
+}
+export function specOf(s: Selection): Spec {
+  const d = byId(DESIGNS, s.id);
+  if (d.variant === 'player') { const kit = playerOf(s); return { id: d.id, kind: d.kind, patch: d.patch, hex: kit.hex, fabric: s.fabric, kit }; }
+  if (d.variant === 'ball') return { id: d.id, kind: d.kind, patch: d.patch, hex: ballOf(s).hex, fabric: s.fabric, num: s.ball };
+  return { id: d.id, kind: d.kind, patch: d.patch, hex: byId(COLOURS, s.colour).hex, fabric: s.fabric, cur: s.cur };
+}
+export function summaryText(s: Selection) {
+  return designName(s) + ' · ' + byId(FABRICS, s.fabric).name;
+}
