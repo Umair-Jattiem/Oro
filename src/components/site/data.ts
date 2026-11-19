@@ -37,7 +37,7 @@ export const FABRICS: Fabric[] = [
 export const DESIGNS: Design[] = [
   { id: 'legend', code: 'OLS-10', name: 'Football legend', kind: 'dome', patch: 'kitpatch', colour: 'black', fabric: 'corduroy', status: 'Concept',    tone: 'concept', panel: '#F5CDB8', rot: -0.3, variant: 'player', fixedColour: true, props: 'players', blurb: 'Your favourite legend in their national colours, with their name and number on a round patch.' },
   { id: 'ols01',  code: 'OLS-01', name: 'Pool ball',       kind: 'dome', patch: 'circle',   colour: 'black', fabric: 'corduroy', status: 'Concept',    tone: 'concept', panel: '#F4B8CF', rot: -0.3, variant: 'ball', props: 'balls', blurb: 'A corduroy beanbag styled as a pool ball, with the white circle and number.' },
-  { id: 'dollar', code: '',       name: 'Money print',     kind: 'dome', patch: 'dollar',   colour: 'green', fabric: 'corduroy', status: 'Idea stage', tone: 'idea',    panel: '#CFE6CB', rot: 0.2,  variant: 'cur', fixedColour: true, props: 'cash', blurb: 'A beanbag covered in a stylised banknote print, in the currency you choose.' },
+  { id: 'dollar', code: '',       name: 'Money print',     kind: 'dome', patch: 'dollar',   colour: 'green', fabric: 'corduroy', status: 'Idea stage', tone: 'idea',    panel: '#CFE6CB', rot: 0.2,  variant: 'cur', fixedColour: true, props: 'notes', blurb: 'A beanbag covered in a stylised banknote print, in the currency you choose.' },
 ];
 export const BALLS: Ball[] = [
   { n: 1, name: 'Yellow', hex: '#E2B020' }, { n: 2, name: 'Blue', hex: '#1F4FB4' }, { n: 3, name: 'Red', hex: '#C8302A' }, { n: 4, name: 'Purple', hex: '#5B2C83' },
@@ -52,18 +52,24 @@ export const CURRENCIES: Currency[] = [
   { id: 'JPY', name: 'Yen',    sym: '¥', paper: '#E6E1F0', ink: '#4B3F75', theme: '#6A55A8' },
 ];
 
-const players: PropSet = KITS.map((k) => ({ t: 'ball', kit: k, pick: { player: k.id } }));
-const balls: PropSet = BALLS.map((b) => ({ t: 'ball', n: b.n, hex: b.hex, pick: { ball: b.n } }));
-const cash: PropSet = [];
-CURRENCIES.forEach((c) => { cash.push({ t: 'note', cur: c.id, pick: { cur: c.id } }); cash.push({ t: 'coin', cur: c.id, pick: { cur: c.id } }); });
-players.unique = true; balls.unique = true; cash.unique = true;
+/* The ring around the beanbag shows the styles of the chosen design (see `props` on each design):
+   every football legend, every pool ball, or one note per currency. Tapping one switches to it. */
 export const PROPSETS: Record<string, PropSet> = {
-  players, balls, cash,
-  lounge: [{ t: 'cord', hex: '#3A3D3F' }, { t: 'spark', hex: '#F4E2A8' }, { t: 'cord', hex: '#1F2A44' }, { t: 'cord', hex: '#CBC3B4' }, { t: 'spark', hex: '#FFFFFF' }],
+  players: KITS.map((k) => ({ t: 'ball', kit: k, pick: { player: k.id } })),
+  balls: BALLS.map((b) => ({ t: 'ball', n: b.n, hex: b.hex, pick: { ball: b.n } })),
+  notes: CURRENCIES.map((c) => ({ t: 'note', cur: c.id, pick: { cur: c.id } })),
 };
 
+/* label for a ring item, used in the tooltip and the keyboard list */
+export function pickLabel(p: Pick) {
+  if (p.player) { const k = kitById(p.player); return `${k.name} ${k.num} · ${k.team}`; }
+  if (p.ball) { const b = BALLS[p.ball - 1]; return `${b.name} ${b.n} ball`; }
+  const c = byId(CURRENCIES, p.cur || 'USD'); return `${c.name} money print`;
+}
+/* the styles of one design, in ring order (for the keyboard and screen-reader list) */
+export const picksFor = (designId: string): Pick[] => (PROPSETS[byId(DESIGNS, designId).props] || []).map((p) => p.pick!);
+
 export const PROVINCES = ['Eastern Cape', 'Free State', 'Gauteng', 'KwaZulu-Natal', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape', 'Western Cape'];
-export const CUSTOM_THEME: Theme = ['#55506e', '#26233a', '#0b0a14'];
 
 export function byId<T extends { id: string }>(list: T[], id: string): T {
   for (let i = 0; i < list.length; i++) if (list[i].id === id) return list[i];

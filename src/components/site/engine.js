@@ -113,7 +113,7 @@ function sparkPath(g, cx, cy, r) {
 var decalCache = {};
 function decalTex(full) {
     if (decalCache[full]) return decalCache[full];
-    var parts = String(full).split(':'), kind = parts[0], arg = parts[1], S = 2048, t;
+    var parts = String(full).split(':'), kind = parts[0], arg = parts[1], S = 1024, t;
     var num = arg || '8', sym = arg || '$';
     if (kind === 'kitpatch' || kind === 'kitprint') {
       t = canvasTex(S, S, function (g) { drawKitDecal(g, S, kind, kitById(arg)); });
@@ -493,9 +493,8 @@ function initHero(stage, canvas, spec0, theme0) {
     var camPos = new T.Vector3(0, 2.2, 7), camLook = new T.Vector3(0, 0.95, 0);
     var baseRot = -0.3, userRot = 0, vel = 0, drag = { on: false, x: 0 }, mx = 0, my = 0, pxs = 0, pys = 0;
     var mouse = { nx: 0, ny: 0, on: false };
-    var sw = { active: false, t0: null, next: null, nextId: '', swapped: false, pSwapped: false };
+    var sw = { active: false, t0: null, next: null, nextId: '', swapped: false, model: null }, lastSpin = 0;
     var theme = { cur: null, from: null, to: null, t0: null, anim: false };
-    var lastBlur = 0;
 
     function ease(k) { return k * k * (3 - 2 * k); }
     function backOut(q, c1) { var c3 = c1 + 1; return 1 + c3 * Math.pow(q - 1, 3) + c1 * Math.pow(q - 1, 2); }
@@ -517,31 +516,51 @@ function initHero(stage, canvas, spec0, theme0) {
       props.forEach(function (p) { propsG.remove(p.g); p.g.traverse(function (o) { if (o.userData && o.userData.own && o.material) o.material.dispose(); }); });
       props = [];
     }
-    function buildProps(id) {
+    /* every style floats in one ring around the beanbag; tapping one switches straight to it */
+    var canHover = window.matchMedia('(hover: hover)').matches;
+    var RING = { rx: 2.15, ry: 1.5, cy: 0.62, z: -0.45 }, ringA = 0, selKey = '', hoverKey = '', hoverCb = null, bornAt = 0;
+    function pickKey(p) { return !p ? '' : p.player ? 'player:' + p.player : p.ball ? 'ball:' + p.ball : 'cur:' + p.cur; }
+    function specKey(s) { return s.kit ? 'player:' + s.kit.id : s.patch === 'circle' ? 'ball:' + (s.num || 8) : s.patch === 'dollar' ? 'cur:' + (s.cur || 'USD') : ''; }
+    var propsKey = '';
+    function buildProps(id, first) {
       clearProps();
-      var d = byId(DESIGNS, id), list = id === 'custom' ? PROPSETS.lounge : (PROPSETS[d.props] || PROPSETS.eight), perm = shuffle(SLOTS);
-      var count = list.unique ? Math.min(list.length, SLOTS.length) : SLOTS.length;
-      for (var i = 0; i < count; i++) {
-        var sl = perm[i], g = makeProp(list[i % list.length]), zf = sl[2] < -2 ? 0.85 : 1.1;
-        g.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3)); propsG.add(g);
-        props.push({ g: g, nx: sl[0], ny: sl[1], z: sl[2], s: g.userData.base * zf * rand(0.85, 1.2), ox: 0, oy: 0, spin: rand(0.25, 0.8), ph: rand(0, 6.28) });
+      var d = byId(DESIGNS, id), list = PROPSETS[d.props] || PROPSETS.players, n = list.length;
+      propsKey = d.props; bornAt = performance.now();
+      for (var i = 0; i < n; i++) {
+        var g = makeProp(list[i]); g.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3)); g.scale.setScalar(0.001); propsG.add(g);
+        props.push({ g: g, a: -Math.PI * 0.5 + (i + 0.5) / n * Math.PI * 2, s: g.userData.base * 0.9, cs: 0, delay: (first ? 250 : 0) + i * 45, spin: rand(0.25, 0.6), ph: rand(0, 6.28), key: pickKey(g.userData.pick) });
       }
     }
-    function install(s) {
+    /* fit the ring on screen: beside the text on wide screens, centred on tablets and phones */
+    var frameZ = 9;
+    function frameRing(w, h) {
+      var asp = w / h, wide = w >= 1100 && asp > 1.2;
+      var x0 = wide ? 0.38 : 0.02, x1 = 0.98, y0 = wide ? 0.12 : 0.05, y1 = 0.97;
+      var tanV = Math.tan(16 * Math.PI / 180), hw = RING.rx + 0.5, hh = RING.ry + 0.5;
+      frameZ = Math.max(hh / (tanV * (y1 - y0)), hw / (tanV * asp * (x1 - x0)));
+      camera.setViewOffset(w, h, (0.5 - (x0 + x1) / 2) * w, (0.5 - (y0 + y1) / 2) * h, w, h);
+    }
+    function install(s, model) {
       if (current) { holder.remove(current); disposeGroup(current); }
-      current = buildModel(s); holder.add(current); kind = s.kind;
+      current = model || buildModel(s); holder.add(current); kind = s.kind;
       var f = CAM[kind].shadow; shadowBlob.scale.set(f, f, 1);
       // a real cast shadow on an invisible floor grounds the beanbag (the soft blob stays underneath as contact shadow)
       var isMat = kind === 'mat'; floor.visible = true; floor.material.opacity = isMat ? 0.55 : 0.4; glow.visible = isMat; shadowBlob.position.y = isMat ? -0.02 : -0.55; shadowBlob.material.opacity = isMat ? 0.45 : 0.55;
     }
     function set(s, designChanged, th) {
-      if (!designChanged) { install(s); return; }
-      if (reduce) { install(s); baseRot = byId(DESIGNS, s.id).rot || 0; userRot = 0; buildProps(s.id); setTheme(th, true); return; }
-      sw.active = true; sw.t0 = null; sw.next = s; sw.nextId = s.id; sw.swapped = false; sw.pSwapped = false; setTheme(th, false);
+      selKey = specKey(s);
+      var nextProps = byId(DESIGNS, s.id).props;
+      if (!designChanged || reduce) { install(s); if (designChanged) { baseRot = byId(DESIGNS, s.id).rot || 0; userRot = 0; } if (nextProps !== propsKey) buildProps(s.id); setTheme(th, reduce); return; }
+      var model = buildModel(s);
+      if (sw.active && !sw.swapped) { if (sw.model) disposeGroup(sw.model); }
+      else { if (sw.active) userRot += lastSpin; sw.active = true; sw.t0 = null; sw.swapped = false; }
+      sw.next = s; sw.nextId = s.id; sw.model = model; sw.leaving = nextProps !== propsKey;
+      setTheme(th, false);
     }
     function resize() {
       var w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
       renderer.setPixelRatio(hqPixelRatio(w, h)); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+      frameRing(w, h);
     }
     var ro = null;
     if ('ResizeObserver' in window) { ro = new ResizeObserver(resize); ro.observe(stage); } else window.addEventListener('resize', resize);
@@ -549,6 +568,7 @@ function initHero(stage, canvas, spec0, theme0) {
     function hintOff() {}
     var ray = new T.Raycaster(), ndc = new T.Vector2(), downAt = null, pickCb = null;
     function pickAt(e) {
+      var margin = e.pointerType === 'mouse' ? 14 : 26;
       var r = canvas.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height * 2 - 1));
       /* forgiving tap targets: nearest prop centre on screen within its size plus a margin */
       var best = null, bestD = 1e9, v = new T.Vector3(), tanH = Math.tan(16 * Math.PI / 180);
@@ -556,7 +576,7 @@ function initHero(stage, canvas, spec0, theme0) {
         var p = props[i]; if (!p.g.userData.pick) continue;
         v.copy(p.g.position).project(camera); if (v.z > 1) continue;
         var sx = (v.x + 1) / 2 * r.width, sy = (1 - v.y) / 2 * r.height;
-        var dz = Math.max(0.5, camera.position.z - p.g.position.z), rad = p.g.scale.x / (dz * tanH) * r.height / 2 * 1.2 + 14;
+        var dz = Math.max(0.5, camera.position.z - p.g.position.z), rad = p.g.scale.x / (dz * tanH) * r.height / 2 * 1.2 + margin;
         var d = Math.hypot(e.clientX - r.left - sx, e.clientY - r.top - sy);
         if (d < rad && d < bestD) { bestD = d; best = p.g.userData.pick; }
       }
@@ -565,9 +585,15 @@ function initHero(stage, canvas, spec0, theme0) {
     canvas.addEventListener('pointerdown', function (e) { drag.on = true; drag.x = e.clientX; vel = 0; downAt = { x: e.clientX, y: e.clientY }; });
     canvas.addEventListener('pointerup', function (e) {
       if (!downAt) return; var moved = Math.abs(e.clientX - downAt.x) + Math.abs(e.clientY - downAt.y); downAt = null;
-      if (moved > 8 || sw.active) return; var p = pickAt(e); if (p && pickCb) pickCb(p);
+      if (moved > 8) return; var p = pickAt(e); if (p && pickCb) pickCb(p);
     });
-    canvas.addEventListener('pointermove', function (e) { if (e.pointerType !== 'mouse' || drag.on) return; canvas.style.cursor = pickAt(e) ? 'pointer' : ''; });
+    canvas.addEventListener('pointermove', function (e) {
+      if (e.pointerType !== 'mouse' || drag.on) return;
+      var p = pickAt(e), r = canvas.getBoundingClientRect();
+      hoverKey = pickKey(p); canvas.style.cursor = p ? 'pointer' : '';
+      if (hoverCb) hoverCb(p, e.clientX - r.left, e.clientY - r.top);
+    });
+    canvas.addEventListener('pointerleave', function () { hoverKey = ''; canvas.style.cursor = ''; if (hoverCb) hoverCb(null, 0, 0); });
     var onWinMove = function (e) {
       var r = stage.getBoundingClientRect();
       var inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
@@ -590,22 +616,21 @@ function initHero(stage, canvas, spec0, theme0) {
         var k = Math.min(1, (now - theme.t0) / 1500), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
         applyTheme(mixRGB(theme.from, theme.to, e)); if (k >= 1) theme.anim = false;
       }
-      var spinVal = 0, blur = 0, propK = 1, propS = 1;
+      var spinVal = 0;
       if (sw.active) {
         if (sw.t0 == null) sw.t0 = now;
         var el_ = (now - sw.t0) / 1000;
-        if (el_ < 0.6) { var k1 = el_ / 0.6; spinVal = Math.PI * 2 * k1 * k1; blur = 15 * k1; }
+        if (el_ < 0.28) { var k1 = el_ / 0.28; spinVal = Math.PI * k1 * k1; }
         else {
-          if (!sw.swapped) { install(sw.next); baseRot = byId(DESIGNS, sw.nextId).rot || 0; userRot = 0; vel = 0; sw.swapped = true; }
-          var q = Math.min(1, (el_ - 0.6) / 1.5); spinVal = Math.PI * 2 + Math.PI * 2 * backOut(q, 0.9); blur = 15 * (1 - q);
+          if (!sw.swapped) {
+            install(sw.next, sw.model); sw.model = null; baseRot = byId(DESIGNS, sw.nextId).rot || 0; userRot = 0; vel = 0; sw.swapped = true;
+            if (byId(DESIGNS, sw.nextId).props !== propsKey) buildProps(sw.nextId);
+          }
+          var q = Math.min(1, (el_ - 0.28) / 0.75); spinVal = Math.PI + Math.PI * backOut(q, 1.1);
         }
-        if (el_ < 0.5) { var kk = ease(el_ / 0.5); propK = 1 - kk; propS = 1 - 0.9 * kk; }
-        else if (el_ < 0.8) { if (!sw.pSwapped) { buildProps(sw.nextId); sw.pSwapped = true; } propK = 0; propS = 0.1; }
-        else if (el_ < 1.7) { if (!sw.pSwapped) { buildProps(sw.nextId); sw.pSwapped = true; } var b = backOut((el_ - 0.8) / 0.9, 1.4); propK = b; propS = 0.1 + 0.9 * b; }
-        if (el_ >= 2.1) { sw.active = false; spinVal = 0; blur = 0; }
+        if (el_ >= 1.03) { sw.active = false; spinVal = 0; }
       }
-      var bl = blur > 0.4 ? Math.round(blur * 2) / 2 : 0;
-      if (bl !== lastBlur) { canvas.style.filter = bl ? 'blur(' + bl + 'px)' : ''; lastBlur = bl; }
+      lastSpin = spinVal;
 
       if (!drag.on) { userRot += vel; vel *= 0.94; }
       pxs += (mx - pxs) * 0.05; pys += (my - pys) * 0.05;
@@ -614,24 +639,20 @@ function initHero(stage, canvas, spec0, theme0) {
       holder.rotation.y = baseRot + userRot + sway + pxs * 0.6 + spinVal;
       shadowBlob.scale.setScalar(CAM[kind].shadow * (1 - bob * 0.5));
 
-      var p0 = CAM[kind], asp = camera.aspect, portrait = asp < 1.2;
-      var zf = Math.max(p0.pos[2] * (portrait ? 0.8 : 1), p0.w * (portrait ? 0.45 : 1) / (0.5734 * asp));
-      camPos.x += (p0.pos[0] - camPos.x) * 0.06; camPos.y += (p0.pos[1] - camPos.y) * 0.06; camPos.z += (zf - camPos.z) * 0.06;
-      camLook.x += (p0.look[0] - camLook.x) * 0.06; camLook.y += (p0.look[1] - camLook.y) * 0.06; camLook.z += (p0.look[2] - camLook.z) * 0.06;
-      camera.position.set(camPos.x + pxs * 0.5, camPos.y - pys * 0.25, camPos.z); camera.lookAt(camLook);
+      camPos.x += (0 - camPos.x) * 0.06; camPos.y += (RING.cy + 1.2 - camPos.y) * 0.06; camPos.z += (frameZ - camPos.z) * 0.06;
+      camLook.x += (0 - camLook.x) * 0.06; camLook.y += (RING.cy - camLook.y) * 0.06; camLook.z += (0 - camLook.z) * 0.06;
+      camera.position.set(camPos.x + pxs * 0.35, camPos.y - pys * 0.18, camPos.z); camera.lookAt(camLook);
 
-      var tanH = Math.tan(16 * Math.PI / 180), camZ = camera.position.z;
+      if (!reduce && canHover && !hoverKey) ringA += dt * 0.03; // drift only with a mouse (it pauses under the cursor); touch screens keep the ring still so taps land
       for (var i = 0; i < props.length; i++) {
-        var p = props[i], dz = Math.max(2, camZ - p.z), hh = tanH * dz, hw = hh * asp;
-        var bx = p.nx * propK, by = p.ny * propK, mult = 1;
-        if (!reduce && mouse.on) {
-          var dx = (bx + p.ox - mouse.nx) * asp, dy = by + p.oy - mouse.ny, d = Math.sqrt(dx * dx + dy * dy), tx = 0, ty = 0;
-          if (d < 0.5 && d > 0.0001) { var f = (0.5 - d) / 0.5; tx = (dx / d) / asp * f * 0.36; ty = (dy / d) * f * 0.36; mult = 1 + f * 5; }
-          p.ox += (tx - p.ox) * 0.1; p.oy += (ty - p.oy) * 0.1;
-        } else { p.ox *= 0.92; p.oy *= 0.92; }
-        p.g.position.set((bx + p.ox) * hw, camLook.y + (by + p.oy) * hh + (reduce ? 0 : Math.sin(t * 0.9 + p.ph) * 0.07), p.z);
-        p.g.scale.setScalar(Math.max(0.001, p.s * propS));
-        if (!reduce) { p.g.rotation.y += dt * p.spin * mult; p.g.rotation.x += dt * p.spin * 0.5 * mult; }
+        var p = props[i], a = p.a + ringA, sel = p.key === selKey, hov = p.key === hoverKey;
+        p.g.position.set(Math.cos(a) * RING.rx, RING.cy + Math.sin(a) * RING.ry + (reduce ? 0 : Math.sin(t * 0.9 + p.ph) * 0.05), RING.z);
+        if (now - bornAt < p.delay && !reduce) continue;
+        var leaving = sw.active && sw.leaving && !sw.swapped;
+        var target = leaving ? 0 : p.s * (sel ? 1.45 : hov ? 1.22 : 1);
+        p.cs += (target - p.cs) * (reduce ? 1 : leaving ? 0.3 : 0.14);
+        p.g.scale.setScalar(Math.max(0.001, p.cs));
+        if (!reduce) { var sp = dt * p.spin * (sel ? 2.2 : 1); p.g.rotation.y += sp; p.g.rotation.x += sp * 0.5; }
       }
       renderer.render(scene, camera);
     }
@@ -643,12 +664,26 @@ function initHero(stage, canvas, spec0, theme0) {
     document.addEventListener('visibilitychange', onVis);
 
     var d0 = byId(DESIGNS, spec0.id);
-    resize(); baseRot = d0.rot || 0; install(spec0); buildProps(spec0.id); setTheme(theme0, true);
-    var asp0 = camera.aspect; camPos.set(0, CAM[kind].pos[1], Math.max(CAM[kind].pos[2] * (asp0 < 1.2 ? 0.8 : 1), CAM[kind].w * (asp0 < 1.2 ? 0.45 : 1) / (0.5734 * asp0)));
+    resize(); baseRot = d0.rot || 0; selKey = specKey(spec0); install(spec0); buildProps(spec0.id, true); setTheme(theme0, true);
+    camPos.set(0, RING.cy + 1.2, frameZ);
+    var warmTimer = setTimeout(function () { warmStyles(renderer, spec0.fabric); }, 1500);
+    /* compile the shaders for every design and ring object in an idle moment, so even the first switch to a design is smooth */
+    var compileTimer = setTimeout(function () {
+      var run = function () {
+        if (disposed) return;
+        var tmp = new T.Group();
+        ['players', 'balls', 'notes'].forEach(function (k) { tmp.add(makeProp(PROPSETS[k][0])); });
+        [{ id: 'legend', kind: 'dome', patch: 'kitpatch', hex: KITS[0].hex, fabric: spec0.fabric, kit: KITS[0] },
+         { id: 'ols01', kind: 'dome', patch: 'circle', hex: '#141213', fabric: spec0.fabric, num: 8 },
+         { id: 'dollar', kind: 'dome', patch: 'dollar', hex: '#17503C', fabric: spec0.fabric, cur: 'USD' }].forEach(function (sp) { tmp.add(buildModel(sp)); });
+        scene.add(tmp); try { renderer.compile(scene, camera); } catch (e) {} scene.remove(tmp); disposeGroup(tmp);
+      };
+      if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 3000 }); else run();
+    }, 2200);
     if (reduce) renderer.render(scene, camera);
     start();
     function dispose() {
-      if (disposed) return; disposed = true; stop();
+      if (disposed) return; disposed = true; stop(); clearTimeout(warmTimer); clearTimeout(compileTimer); warmToken++;
       if (ro) ro.disconnect(); else window.removeEventListener('resize', resize);
       if (io) io.disconnect();
       document.removeEventListener('visibilitychange', onVis);
@@ -657,7 +692,7 @@ function initHero(stage, canvas, spec0, theme0) {
       clearProps(); if (current) disposeGroup(current);
       renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {}
     }
-    return { set: set, busy: function () { return sw.active; }, onPick: function (fn) { pickCb = fn; }, dispose: dispose };
+    return { set: set, busy: function () { return false; }, onPick: function (fn) { pickCb = fn; }, onHover: function (fn) { hoverCb = fn; }, warm: function (fabric) { warmStyles(renderer, fabric); }, dispose: dispose };
   }
 function makeThumbs(specs, o, done) {
     var W = o.W, H = o.H, zoom = o.zoom || 1, r;
@@ -742,20 +777,34 @@ function drawSeams(g, w, h) {
       }
     }
   }
-function fabricTextures(hex, fabric, size, kit) {
-    var W = size || HQ_TEX, H = W / 2, key = hex + '|' + fabric + '|' + W + (kit ? '|' + kit.id : ''); if (fabricCache[key]) return fabricCache[key];
-    var cord = fabric === 'corduroy', lum = lumOf(hex);
+/* Fabric = a tiny colour layer per style (so switching styles is instant) multiplied by ONE shared, high-resolution
+   greyscale fabric layer per fabric type (ribs, fibres, mottling, sewn seams) and a shared bump map. */
+var FABRIC_TEX = small ? 1024 : 2048;
+var fabricDetailCache = {}, fabricDetailOf = new WeakMap(), colourCache = {};
+function fabricDetail(fabric) {
+    if (fabricDetailCache[fabric]) return fabricDetailCache[fabric];
+    var cord = fabric === 'corduroy', W = FABRIC_TEX, H = W / 2;
     var map = canvasTex(W, H, function (g, w, h) {
-      g.fillStyle = hex; g.fillRect(0, 0, w, h);
-      if (kit) drawKitFabric(g, w, h, kit);
+      g.fillStyle = '#808080'; g.fillRect(0, 0, w, h);
       mottle(g, w, h, cord ? 0.035 : 0.06, cord ? 170 : 320);
-      if (cord) drawRibs(g, w, h, RIBS, lum);
+      if (cord) drawRibs(g, w, h, RIBS, 0.45);
       layTile(g, w, h, fibreTile(509, 'grey'), cord ? 0.32 : 0.45, 'overlay');
-      layTile(g, w, h, fibreTile(383, 'hair'), 0.35 + 0.2 * (1 - lum));
+      layTile(g, w, h, fibreTile(383, 'hair'), 0.42);
       layTile(g, w, h, fibreTile(257, 'hair'), 0.3);
       drawSeams(g, w, h);
-    });
+    }, false);
     map.wrapS = T.RepeatWrapping;
+    var t = fabricBump(fabric, W, H);
+    return (fabricDetailCache[fabric] = { map: map, bump: t });
+  }
+function colourTex(hex, kit) {
+    var key = kit ? 'kit|' + kit.id : hex; if (colourCache[key]) return colourCache[key];
+    var t = canvasTex(kit ? 1024 : 4, kit ? 512 : 2, function (g, w, h) { g.fillStyle = hex; g.fillRect(0, 0, w, h); if (kit) drawKitFabric(g, w, h, kit); });
+    t.wrapS = T.RepeatWrapping;
+    return (colourCache[key] = t);
+  }
+function fabricBump(fabric, W, H) {
+    var cord = fabric === 'corduroy';
     var bump = canvasTex(W, H, function (g, w, h) {
       g.fillStyle = '#808080'; g.fillRect(0, 0, w, h);
       if (cord) { var p = w / RIBS; for (var i = 0; i < RIBS; i++) { var x = i * p, gr = g.createLinearGradient(x, 0, x + p, 0); gr.addColorStop(0, '#4a4a4a'); gr.addColorStop(0.3, '#9a9a9a'); gr.addColorStop(0.5, '#c4c4c4'); gr.addColorStop(0.7, '#9a9a9a'); gr.addColorStop(1, '#4a4a4a'); g.fillStyle = gr; g.fillRect(x, 0, p + 0.5, h); } }
@@ -763,15 +812,21 @@ function fabricTextures(hex, fabric, size, kit) {
       for (var k = 0; k <= 6; k++) { var sx = k * w / 6, sg = g.createLinearGradient(sx - w * 0.005, 0, sx + w * 0.005, 0); sg.addColorStop(0, 'rgba(0,0,0,0)'); sg.addColorStop(0.5, 'rgba(0,0,0,0.5)'); sg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sg; g.fillRect(sx - w * 0.005, 0, w * 0.01, h); }
     }, false);
     bump.wrapS = T.RepeatWrapping;
-    return (fabricCache[key] = { map: map, bump: bump });
+    return bump;
   }
 function fabricMat(hex, fabric, size, kit) {
-    var key = hex + '|' + fabric + '|' + (size || HQ_TEX) + (kit ? '|' + kit.id : ''); if (matCache[key]) return matCache[key];
-    var t = fabricTextures(hex, fabric, size, kit), cord = fabric === 'corduroy';
-    return (matCache[key] = new T.MeshPhysicalMaterial({
-      map: t.map, bumpMap: t.bump, bumpScale: cord ? 0.018 : 0.025, roughness: cord ? 0.92 : 0.86, metalness: 0, envMapIntensity: 0.38,
+    var key = (kit ? 'kit|' + kit.id : hex) + '|' + fabric; if (matCache[key]) return matCache[key];
+    var d = fabricDetail(fabric), cord = fabric === 'corduroy';
+    var m = new T.MeshPhysicalMaterial({
+      map: colourTex(hex, kit), bumpMap: d.bump, bumpScale: cord ? 0.018 : 0.025, roughness: cord ? 0.92 : 0.86, metalness: 0, envMapIntensity: 0.38,
       sheen: cord ? 0.55 : 0.65, sheenRoughness: 0.45, sheenColor: new T.Color(shade(hex, cord ? 0.16 : 0.26))
-    }));
+    });
+    fabricDetailOf.set(m, d.map);
+    return (matCache[key] = m);
+  }
+var neutralTex = null;
+function neutralGrey() {
+    return neutralTex || (neutralTex = canvasTex(2, 2, function (g) { g.fillStyle = '#808080'; g.fillRect(0, 0, 2, 2); }, false));
   }
 var detailTexV = null;
 function detailTex() {
@@ -779,14 +834,17 @@ function detailTex() {
     var t = new T.CanvasTexture(fibreTile(1024, 'grey')); t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = ANISO;
     return (detailTexV = t);
   }
-function addFibreDetail(m) {
+/* shader: shared fabric layer (multiplied, plus a little added so dark fabrics still show their texture) and fine fibres */
+function addFibreDetail(m, fabricLayer) {
+    var fd = fabricLayer || neutralGrey();
     m.onBeforeCompile = function (sh) {
       sh.uniforms.detailMap = { value: detailTex() };
-      sh.fragmentShader = 'uniform sampler2D detailMap;\n' + sh.fragmentShader
-        .replace('#include <map_fragment>', '#include <map_fragment>\n  vec3 fibreD = texture2D( detailMap, vUv * vec2( 40.0, 20.0 ) ).rgb;\n  diffuseColor.rgb *= mix( vec3( 1.0 ), fibreD * 2.0, 0.28 );')
+      sh.uniforms.fabricDetail = { value: fd };
+      sh.fragmentShader = 'uniform sampler2D detailMap;\nuniform sampler2D fabricDetail;\n' + sh.fragmentShader
+        .replace('#include <map_fragment>', '#include <map_fragment>\n  vec3 fabD = texture2D( fabricDetail, vUv ).rgb;\n  diffuseColor.rgb = max( diffuseColor.rgb * fabD * 2.0 + ( fabD - 0.5 ) * 0.1, 0.0 );\n  vec3 fibreD = texture2D( detailMap, vUv * vec2( 40.0, 20.0 ) ).rgb;\n  diffuseColor.rgb *= mix( vec3( 1.0 ), fibreD * 2.0, 0.28 );')
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor *= mix( 0.88, 1.08, fibreD.r );');
     };
-    m.customProgramCacheKey = function () { return 'fibre-detail'; };
+    m.customProgramCacheKey = function () { return 'fibre-detail-2'; };
     return m;
   }
 
@@ -815,25 +873,31 @@ function capGeometryHQ(R, angle) {
   }
 var bagMatCache = {};
 function bagBodyMat(s) {
-    var dollar = s.patch === 'dollar', size = s.texSize || HQ_TEX, k = 'bag|' + (dollar ? '$' + (s.cur || 'USD') : s.hex) + s.fabric + size + (s.kit ? '|' + s.kit.id : '');
+    var dollar = s.patch === 'dollar', k = 'bag|' + (dollar ? '$' + (s.cur || 'USD') : s.kit ? 'kit|' + s.kit.id : s.hex) + '|' + s.fabric;
     if (!bagMatCache[k]) {
-      var m = (dollar ? dollarMat(s.fabric, s.cur) : fabricMat(s.hex, s.fabric, size, s.kit)).clone();
+      var src = dollar ? dollarMat(s.fabric, s.cur) : fabricMat(s.hex, s.fabric, 0, s.kit), m = src.clone();
       m.clippingPlanes = [clipPlane]; m.clipShadows = true; m.vertexColors = true; m.envMapIntensity = 0.38;
-      bagMatCache[k] = addFibreDetail(m);
+      bagMatCache[k] = addFibreDetail(m, fabricDetailOf.get(src));
     }
     return bagMatCache[k];
+  }
+/* the beanbag shape is the same for every style: work it out once, then hand out cheap copies */
+var shapeCache = {};
+function shapedCopy(key, make, off, ao) {
+    if (!shapeCache[key]) { var m0 = morphable(make(), off, ao); applyShape(m0, 0); shapeCache[key] = m0; }
+    var c = shapeCache[key];
+    return { geo: c.geo.clone(), dirs: c.dirs, off: c.off, ao: c.ao };
   }
 function buildDome(s) {
     var g = new T.Group(), inner = new T.Group();
     inner.scale.set(1, 0.88, 1); inner.position.y = 0.7; g.add(inner);
     var hq = !small || s.texSize === SNAP_TEX;
-    var body = shadowify(new T.Mesh(new T.SphereGeometry(1, hq ? 256 : 160, hq ? 192 : 120), bagBodyMat(s)));
-    var mb = morphable(body.geometry, 0, true); applyShape(mb, 0); inner.add(body);
+    var mb = shapedCopy('body' + hq, function () { return new T.SphereGeometry(1, hq ? 256 : 160, hq ? 192 : 120); }, 0, true);
+    var body = shadowify(new T.Mesh(mb.geo, bagBodyMat(s))); inner.add(body);
     var morphs = [mb];
     var printed = s.patch === 'print' || s.patch === 'kitprint';
     if (s.patch === 'circle' || printed || s.patch === 'bagsign' || (s.patch === 'kitpatch' && s.kit)) {
-      var cg = capGeometryHQ(1, 0.56); cg.rotateX(Math.PI / 2 - 0.12);
-      var mc = morphable(cg, 0.0045, false); applyShape(mc, 0);
+      var mc = shapedCopy('cap', function () { var cg0 = capGeometryHQ(1, 0.56); cg0.rotateX(Math.PI / 2 - 0.12); return cg0; }, 0.0045, false), cg = mc.geo;
       var dk = s.patch + ':' + (s.kit ? s.kit.id : s.patch === 'bagsign' ? curInfo(s.cur).sym : String(s.num || 8));
       var badge = s.patch === 'kitpatch' || s.patch === 'circle';
       var mat = new T.MeshStandardMaterial({ map: decalTex(dk), bumpMap: badge ? decalBump(dk) : detailTex(), bumpScale: badge ? 0.9 : 0.02, roughness: printed ? 0.92 : badge ? 0.72 : 0.85, envMapIntensity: 0.4, transparent: printed, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
@@ -911,4 +975,27 @@ function decalBump(full) {
   if (decalBumpCache[full]) return decalBumpCache[full];
   var S = 1024;
   return (decalBumpCache[full] = canvasTex(S, S, function (g) { drawBadgeBump(g, S, badgeFor(full)); }, false));
+}
+
+/* Prepare every style's textures in idle moments after the page loads, so switching styles never waits on painting.
+   On phones and tablets only the light colour layers are prepared, to save memory. */
+var warmToken = 0;
+function warmStyles(renderer, fabric) {
+  var token = ++warmToken, list = [], i = 0;
+  ['players', 'balls', 'notes'].forEach(function (key) { PROPSETS[key].forEach(function (sp) {
+    if (sp.kit) list.push({ id: 'legend', kind: 'dome', patch: 'kitpatch', hex: sp.kit.hex, fabric: fabric, kit: sp.kit });
+    else if (sp.t === 'ball') list.push({ id: 'ols01', kind: 'dome', patch: 'circle', hex: sp.hex, fabric: fabric, num: sp.n });
+    else if (sp.t === 'note' && !small) list.push({ id: 'dollar', kind: 'dome', patch: 'dollar', hex: '#17503C', fabric: fabric, cur: sp.cur });
+  }); });
+  function upload(tex) { if (tex && renderer.initTexture) try { renderer.initTexture(tex); } catch (e) {} }
+  function step(deadline) {
+    if (token !== warmToken) return;
+    do {
+      var s = list[i++]; if (!s) return;
+      var m = bagBodyMat(s); upload(m.map);
+      if (!small && s.patch !== 'dollar') { var dk = s.patch + ':' + (s.kit ? s.kit.id : String(s.num || 8)); upload(decalTex(dk)); upload(decalBump(dk)); }
+    } while (deadline && deadline.timeRemaining() > 12);
+    if (i < list.length) { if (window.requestIdleCallback) requestIdleCallback(step, { timeout: 2000 }); else setTimeout(step, 80); }
+  }
+  step(null);
 }

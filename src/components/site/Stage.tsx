@@ -7,6 +7,8 @@ export type Hero = {
   set: (spec: Spec, designChanged: boolean, theme: Theme) => void;
   busy: () => boolean;
   onPick: (fn: (p: Pick) => void) => void;
+  onHover: (fn: (p: Pick | null, x: number, y: number) => void) => void;
+  warm: (fabric: string) => void;
   dispose: () => void;
 };
 export type Engine = typeof import('./engine');
@@ -36,15 +38,17 @@ type Props = {
   onHero: (hero: Hero | null) => void;
   onPick: (p: Pick) => void;
   onEngine?: (engine: Engine | null) => void;
+  onHover?: (p: Pick | null, x: number, y: number) => void;
 };
 
 /* The live 3D beanbag with its floating props. Falls back to a still image without WebGL. */
-export default function Stage({ hint, getInitial, onHero, onPick, onEngine }: Props) {
+export default function Stage({ hint, getInitial, onHero, onPick, onEngine, onHover }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
   const pickRef = useRef(onPick);
-  useEffect(() => { pickRef.current = onPick; });
+  const hoverRef = useRef(onHover);
+  useEffect(() => { pickRef.current = onPick; hoverRef.current = onHover; });
 
   useEffect(() => {
     let hero: Hero | null = null, cancelled = false;
@@ -56,6 +60,7 @@ export default function Stage({ hint, getInitial, onHero, onPick, onEngine }: Pr
         const { spec, theme } = getInitial();
         hero = engine.initHero(stageRef.current, canvasRef.current, spec, theme) as Hero;
         hero.onPick((p) => pickRef.current(p));
+        hero.onHover((p, x, y) => hoverRef.current?.(p, x, y));
         document.documentElement.classList.add('gl-on');
         setReady(true);
         onHero(hero);

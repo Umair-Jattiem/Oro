@@ -355,3 +355,46 @@ html.lenis{scroll-behavior:auto}
 .oro-hero{font-size:clamp(4.6rem,8.4vw,9rem);text-shadow:0 6px 40px rgba(0,0,0,.3);margin-bottom:-.15em}
 .oro-hero .oro-o{width:1.12em;height:1.12em;top:.12em}
 @media (max-width:1200px){.oro-hero{align-self:center;font-size:clamp(4rem,18vw,7rem)}}
+
+/* ===== One-page layout: style ring around the beanbag, order section below ===== */
+/* label beside the cursor for the style it is over */
+.ring-tip{position:absolute;left:0;top:0;z-index:120;pointer-events:none;padding:7px 12px;border-radius:999px;background:rgba(20,10,26,.78);border:1px solid rgba(255,255,255,.18);color:#fff;font:600 .8rem/1 var(--display);white-space:nowrap;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 8px 24px rgba(0,0,0,.3)}
+/* keyboard / screen-reader style list: out of sight until you Tab into it */
+.key-styles{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.key-styles:focus-within{position:static;width:auto;height:auto;overflow:visible;clip-path:none;display:flex;flex-wrap:wrap;gap:6px;white-space:normal}
+.key-styles button{min-height:36px;padding:6px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.4);background:rgba(0,0,0,.35);color:#fff;font:600 .75rem var(--display);cursor:pointer}
+.key-styles button[aria-pressed="true"]{background:#fbcfe8;color:#1a0a14;border-color:#fbcfe8}
+.hero-left .btnrow{align-items:center;gap:12px}
+.hero-left .btnrow .primary-btn{pointer-events:auto}
+/* order section: summary of the chosen beanbag beside the form */
+.order{min-height:0;padding-top:clamp(64px,8vw,110px);padding-bottom:3rem}
+.op-piece{position:relative;width:100%;aspect-ratio:1/1;max-height:70vh;border-radius:28px;overflow:hidden;background:radial-gradient(circle at 50% 42%,rgba(255,255,255,.12),rgba(255,255,255,.03) 62%);border:1px solid rgba(255,255,255,.12);display:grid;place-items:center}
+.op-piece img{width:86%;height:86%;object-fit:contain;filter:drop-shadow(0 30px 40px rgba(0,0,0,.45))}
+.op-wait{font:500 12px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+.op-name{margin:6px 0 0;font:400 clamp(2rem,3.4vw,2.8rem)/1 'Galada',cursive;color:#fff}
+.op-cap a{color:#fbcfe8}
+.op-title{font:400 clamp(2.2rem,3.8vw,3.4rem)/1 'Galada',cursive;margin:0}
+/* tablets and phones: ring centred under the header, text below */
+@media (max-width:1200px){
+  .hero-center{margin-top:5.2rem;height:min(62vh,640px)}
+  .hero-left{align-items:center;text-align:center}
+  .hero-left .desc{margin-left:auto;margin-right:auto}
+  .ctl{align-items:center;margin-left:auto;margin-right:auto}
+  .now,.crow,.hero-left .btnrow{justify-content:center}
+  .hint{white-space:normal;text-align:center;max-width:calc(100% - 32px)}
+}
+/* touch screens: bigger targets, no hover-only effects */
+@media (hover:none){
+  .mini button{min-height:44px;padding:10px 18px}
+  .ghost-btn{min-height:46px}
+}
+
+/* design cards: football legends / pool balls / money, each with a 3D thumbnail */
+.design-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:430px;width:100%}
+.design-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 6px 10px;border-radius:18px;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#fff;font:700 .78rem/1.2 var(--display);cursor:pointer;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:background .25s,border-color .25s,transform .25s}
+.design-card:hover{background:rgba(255,255,255,.13);transform:translateY(-2px)}
+.design-card[aria-pressed="true"]{border-color:#fbcfe8;background:rgba(251,207,232,.14)}
+.design-card img{width:100%;max-width:96px;aspect-ratio:7/6;object-fit:contain;filter:drop-shadow(0 8px 12px rgba(0,0,0,.35))}
+.design-ph{width:100%;max-width:96px;aspect-ratio:7/6}
+@media (hover:none){.design-card{min-height:44px}}
+@media (max-width:1200px){.design-cards{margin-left:auto;margin-right:auto}}

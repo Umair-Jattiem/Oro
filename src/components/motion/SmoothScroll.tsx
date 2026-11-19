@@ -15,6 +15,13 @@ export function scrollToTop() {
   if (lenis) lenis.scrollTo(0, { immediate: true, force: true });
   else window.scrollTo(0, 0);
 }
+/* glide to a section of the page (instantly for people who prefer reduced motion) */
+export function scrollToId(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (lenis) lenis.scrollTo(el, { duration: 1.2 });
+  else el.scrollIntoView({ behavior: window.matchMedia(REDUCED).matches ? 'auto' : 'smooth' });
+}
 /* pause page scrolling while an overlay is open */
 export function lockScroll(locked: boolean) {
   if (!lenis) return;

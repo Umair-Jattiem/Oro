@@ -2,207 +2,158 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  COLOURS, CUSTOM_THEME, DESIGNS, INITIAL_SELECTION, byId, designName, specOf, summaryText, themeOf, variantLabel,
-  type Pick, type Selection, type Spec,
+  DESIGNS, INITIAL_SELECTION, byId, designName, pickLabel, picksFor, specOf, themeOf,
+  type Pick, type Selection,
 } from './data';
 import Stage, { type Engine, type Hero } from './Stage';
-import OrderPage, { type OrderState } from './OrderPage';
-import { FabricPills, Swatches, VariantChips } from './controls';
+import OrderSection from './OrderSection';
+import { FabricPills } from './controls';
 import K4Viewer, { type K4Request } from '../shared/K4Viewer';
-import SmoothScroll, { scrollToTop } from '../motion/SmoothScroll';
+import SmoothScroll, { scrollToId } from '../motion/SmoothScroll';
 import { useSiteMotion } from './useSiteMotion';
 import ScrollVelocity from '../react-bits/ScrollVelocity';
-import SpotlightCard from '../react-bits/SpotlightCard';
 import Magnet from '../react-bits/Magnet';
 import OroMark from './OroMark';
 
-/* SpotlightCard brings its own dark surface, border and shadow; the cards keep their own look instead */
-const SPOT_STYLE = { '--spotlight-card-surface': 'transparent', '--spotlight-card-border': 'transparent', '--spotlight-card-shadow': 'none' } as React.CSSProperties;
+/* which design a ring item belongs to, and whether it is the one showing */
+const designFor = (p: Pick) => (p.player ? 'legend' : p.ball ? 'ols01' : 'dollar');
+const isCurrent = (p: Pick, s: Selection) =>
+  s.id === designFor(p) && (p.player ? s.player === p.player : p.ball ? s.ball === p.ball : s.cur === p.cur);
 
-type View = 'home' | 'order' | 'custom';
-const viewFromHash = (): View => {
-  const h = window.location.hash.slice(1);
-  return h === 'order' || h === 'custom' ? h : 'home';
-};
-
+/*
+ * One page: pick a style from the ring around the 3D beanbag, choose the fabric, then order it further down.
+ */
 export default function SiteApp() {
   const [sel, setSel] = useState<Selection>(INITIAL_SELECTION);
-  const [order, setOrder] = useState<OrderState>({ mode: 'design', qty: 1, fabric: 'corduroy', colour: 'black' });
-  const [view, setView] = useState<View>('home');
-  const [carStart, setCarStart] = useState(0);
-  const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [k4, setK4] = useState<K4Request | null>(null);
   const [engine, setEngine] = useState<Engine | null>(null);
-  const [oIcon, setOIcon] = useState<string | null>(null);
+  const [shot, setShot] = useState<string | null>(null);
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
 
-  /* the "O" in Oro becomes the chosen beanbag: re-render it whenever the selection changes */
+  const selRef = useRef(sel), heroRef = useRef<Hero | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null), tipRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { selRef.current = sel; });
+  useSiteMotion(rootRef);
+
+  /* the "O" in Oro and the order summary show the chosen beanbag: re-render it once the switch has settled */
   useEffect(() => {
     if (!engine) return;
-    const t = setTimeout(() => {
-      try { setOIcon(engine.snapBag(specOf(sel), 320, 320)); } catch (e) { console.error(e); }
-    }, 30);
-    return () => clearTimeout(t);
+    let idle = 0;
+    const timer = setTimeout(() => {
+      const run = () => { try { setShot(engine.snapBag(specOf(sel), 560, 560)); } catch (e) { console.error(e); } };
+      if ('requestIdleCallback' in window) idle = requestIdleCallback(run, { timeout: 800 }); else run();
+    }, 1050);
+    return () => { clearTimeout(timer); if (idle) cancelIdleCallback(idle); };
   }, [engine, sel]);
 
-  /* refs mirror state for callbacks that come from the 3D scene */
-  const selRef = useRef(sel), orderRef = useRef(order), viewRef = useRef(view);
-  const heroRef = useRef<Hero | null>(null), engineRef = useRef<Engine | null>(null);
-  const thumbsStarted = useRef(false);
-  const rootRef = useRef<HTMLDivElement>(null), carDir = useRef(1);
-  useSiteMotion(rootRef, view, carStart, carDir);
-  useLayoutEffect(() => { selRef.current = sel; orderRef.current = order; viewRef.current = view; });
-
-  const busy = () => !!heroRef.current?.busy();
-  const customSpec = (o: OrderState): Spec => ({ id: 'custom', kind: 'dome', patch: 'none', hex: byId(COLOURS, o.colour).hex, fabric: o.fabric });
-
-  function applySel(next: Selection, designChanged: boolean) {
+  /* tapping a ball or note in the ring (or a button in the keyboard list) switches straight to that style */
+  const choose = useCallback((p: Pick) => {
+    const cur = selRef.current;
+    if (isCurrent(p, cur)) return;
+    const id = designFor(p), d = byId(DESIGNS, id);
+    const next: Selection = { ...cur, id, colour: d.colour, player: p.player ?? cur.player, ball: p.ball ?? cur.ball, cur: p.cur ?? cur.cur };
     selRef.current = next; setSel(next);
-    heroRef.current?.set(specOf(next), designChanged, themeOf(next));
-  }
-  function selectDesign(id: string) {
-    if (busy()) return;
-    const cur = selRef.current, d = byId(DESIGNS, id);
-    const n = DESIGNS.indexOf(d);
-    carDir.current = 1;
-    setCarStart((start) => (((n - start + DESIGNS.length) % DESIGNS.length) >= 2 ? n : start));
-    applySel({ ...cur, id: d.id, colour: d.colour, fabric: d.fabric }, d.id !== cur.id);
-  }
-  const pickVariant = useCallback((p: Pick) => {
-    if (busy()) return;
-    const cur = selRef.current, d = byId(DESIGNS, cur.id);
-    if (p.player && d.variant === 'player') { if (p.player !== cur.player) applySel({ ...cur, player: p.player }, true); }
-    else if (p.ball && d.variant === 'ball') { if (p.ball !== cur.ball) applySel({ ...cur, ball: p.ball }, true); }
-    else if (p.cur && d.variant === 'cur') { if (p.cur !== cur.cur) applySel({ ...cur, cur: p.cur }, true); }
+    heroRef.current?.set(specOf(next), true, themeOf(next));
   }, []);
-  function setFabric(id: string) { if (!busy()) applySel({ ...selRef.current, fabric: id }, false); }
-  function setColour(id: string) { if (!busy()) applySel({ ...selRef.current, colour: id }, false); }
-  function setCustom(patch: Partial<OrderState>) {
-    if (busy()) return;
-    const next = { ...orderRef.current, ...patch };
-    orderRef.current = next; setOrder(next);
-    heroRef.current?.set(customSpec(next), false, CUSTOM_THEME);
+  function setFabric(fabric: string) {
+    if (fabric === selRef.current.fabric) return;
+    const next = { ...selRef.current, fabric };
+    selRef.current = next; setSel(next);
+    heroRef.current?.set(specOf(next), false, themeOf(next));
+    heroRef.current?.warm(fabric);
   }
 
-  /* hash routing: #home, #order, #custom */
-  useEffect(() => {
-    let prev = viewFromHash();
-    const route = () => {
-      const v = viewFromHash();
-      // switching tabs inside the order page keeps the same 3D stage, so restyle it with a spin
-      if (prev === 'order' && v === 'custom') heroRef.current?.set(customSpec(orderRef.current), true, CUSTOM_THEME);
-      if (prev === 'custom' && v === 'order') heroRef.current?.set(specOf(selRef.current), true, themeOf(selRef.current));
-      if (v !== 'home') setOrder((o) => ({ ...o, mode: v === 'custom' ? 'custom' : 'design' }));
-      if (v !== 'home') scrollToTop();
-      prev = v; setView(v);
-    };
-    route();
-    window.addEventListener('hashchange', route);
-    return () => window.removeEventListener('hashchange', route);
-  }, []);
-
-  /* rendered once the engine is ready: 3D thumbnails for the carousel and the order page */
-  const onEngine = useCallback((engine: Engine | null) => {
-    engineRef.current = engine;
-    setEngine(engine);
-    if (!engine || thumbsStarted.current) return;
-    thumbsStarted.current = true;
-    setTimeout(() => {
-      try { engine.makeThumbs(DESIGNS, { W: 560, H: 480, zoom: 1.12 }, setThumbs); } catch (e) { console.error(e); }
-    }, 400);
+  /* label beside the cursor for the style it is over (updated directly, so moving the mouse never re-renders the page) */
+  const onHover = useCallback((p: Pick | null, x: number, y: number) => {
+    const el = tipRef.current;
+    if (!el) return;
+    if (!p) { el.hidden = true; return; }
+    el.textContent = pickLabel(p); el.hidden = false;
+    el.style.transform = `translate(${Math.round(x + 16)}px, ${Math.round(y - 12)}px)`;
   }, []);
   const onHero = useCallback((h: Hero | null) => { heroRef.current = h; }, []);
-  const getInitial = useCallback(() => (
-    viewRef.current === 'custom'
-      ? { spec: customSpec(orderRef.current), theme: CUSTOM_THEME }
-      : { spec: specOf(selRef.current), theme: themeOf(selRef.current) }
-  ), []);
+  /* once the 3D engine is ready: remember it, and render a small 3D thumbnail for each design card */
+  const onEngine = useCallback((e: Engine | null) => {
+    setEngine(e);
+    if (e) setTimeout(() => { try { e.makeThumbs(DESIGNS, { W: 280, H: 240, zoom: 1.12 }, setThumbs); } catch (err) { console.error(err); } }, 600);
+  }, []);
+  /* the design cards switch between football legends, pool balls and money; the ring then shows that design's styles */
+  const selectDesign = useCallback((id: string) => {
+    const cur = selRef.current;
+    if (cur.id === id) return;
+    const d = byId(DESIGNS, id), next: Selection = { ...cur, id, colour: d.colour };
+    selRef.current = next; setSel(next);
+    heroRef.current?.set(specOf(next), true, themeOf(next));
+  }, []);
+  const getInitial = useCallback(() => ({ spec: specOf(selRef.current), theme: themeOf(selRef.current) }), []);
 
   function open4K() {
-    const engine = engineRef.current;
     if (!engine) return;
     setK4({ spec: specOf(selRef.current), label: designName(selRef.current), render: engine.renderStudio as K4Request['render'] });
   }
+  const go = (id: string) => (e: React.MouseEvent) => { e.preventDefault(); scrollToId(id); };
 
   const d = byId(DESIGNS, sel.id);
-  const isOrder = view !== 'home';
-  const hint = d.variant === 'player' ? 'Tap a ball to change player' : d.variant === 'ball' ? 'Tap a ball to change colour' : 'Tap a note or coin to change currency';
-  const stage = <Stage hint={hint} getInitial={getInitial} onHero={onHero} onPick={pickVariant} onEngine={onEngine} />;
-  const visibleCards = [0, 1].map((k) => DESIGNS[(carStart + k) % DESIGNS.length]);
-
   return (
     <div ref={rootRef}>
       <SmoothScroll />
       <div id="progress" aria-hidden="true" />
       <header className="header" id="top">
-        <a className="logo" href="#home" aria-label="Oro home"><OroMark icon={oIcon} /></a>
-        <nav className="nav" aria-label="Main">
-          <a href="#home" aria-current={view === 'home'}>Home</a>
-          <a href="#order" aria-current={view === 'order'}>Customise &amp; order</a>
-          <a href="#custom" aria-current={view === 'custom'}>Custom design</a>
-        </nav>
-        <a className="contact-btn" href="#order">Order now</a>
+        <a className="logo" href="#home" aria-label="Oro, back to the top" onClick={go('home')}><OroMark icon={shot} /></a>
+        <a className="contact-btn" href="#order" onClick={go('order')}>Order now</a>
       </header>
 
       <main>
-        <section className="hero2" id="home" hidden={isOrder}>
-          <Bubbles active={!isOrder} />
-          {!isOrder && stage}
+        <section className="hero2" id="home">
+          <Bubbles />
+          <Stage hint={d.variant === 'player' ? 'Tap a ball to change player · drag to spin' : d.variant === 'ball' ? 'Tap a ball to change colour · drag to spin' : 'Tap a note to change currency · drag to spin'} getInitial={getInitial} onHero={onHero} onPick={choose} onEngine={onEngine} onHover={onHover} />
+          <div className="ring-tip" ref={tipRef} hidden aria-hidden="true" />
           <div className="hero-in">
             <div className="hero-left">
-              <OroMark icon={oIcon} className="oro-hero" />
+              <OroMark icon={shot} className="oro-hero" />
               <h1 className="title"><span className="o">Sit</span><br />Different</h1>
-              <p className="desc">Oversized beanbags for rooms with a point of view. Everything here is an early concept: pick a design, tap a ball or note around it to restyle it, and tell us what you think.</p>
-              <Magnet padding={80} magnetStrength={4} maxOffset={14} style={{ alignSelf: 'flex-start' }}>
-                <a className="primary-btn" href="#order">Customise &amp; order<span className="plus" aria-hidden="true">+</span></a>
-              </Magnet>
-              <div className="ctl" aria-label="Customise the concept">
+              <p className="desc">Oversized beanbags for rooms with a point of view. Tap any ball or note around the beanbag to restyle it, then order it below.</p>
+              <div className="ctl" aria-label="Your beanbag">
                 <div className="now">
-                  <span>{(d.code ? d.code + ' · ' : '') + designName(sel, d)}</span>
-                  <span className={'chip tone-' + d.tone}>{d.status}</span>
+                  <span aria-live="polite">{designName(sel, d)}</span>
                 </div>
-                <div className="crow"><span className="lab">Fabric (proposed)</span><div className="mini" role="group" aria-label="Fabric"><FabricPills value={sel.fabric} onChange={setFabric} /></div></div>
                 <div className="crow">
-                  <span className="lab">{variantLabel(sel, d)}</span>
-                  <div className="vchips" role="group" aria-label="Style"><VariantChips kind={d.variant} player={sel.player} ball={sel.ball} cur={sel.cur} onPick={pickVariant} /></div>
+                  <span className="lab">Fabric (proposed)</span>
+                  <div className="mini" role="group" aria-label="Fabric"><FabricPills value={sel.fabric} onChange={setFabric} /></div>
                 </div>
-                <div className="crow" hidden={d.id !== 'bagsign'}>
-                  <span className="lab">Colour: {byId(COLOURS, sel.colour).name}</span>
-                  <div className="sws" role="group" aria-label="Colour"><Swatches value={sel.colour} onChange={setColour} /></div>
-                </div>
-                <p className="fine">{summaryText(sel)}</p>
-                <p className="fine">Live 3D concept, not a photograph of a finished product. Price, fabric and colour options to be confirmed.</p>
-                <div className="btnrow">
-                  <button type="button" className="ghost-btn" onClick={() => { window.location.hash = 'order'; }}>Order this design</button>
-                  <button type="button" className="ghost-btn" onClick={open4K}>View in 4K</button>
-                </div>
-              </div>
-            </div>
-            <div className="hero-right">
-              <div className="carousel">
-                <div className="cards">
-                  {visibleCards.map((x) => (
-                    <button key={x.id} type="button" className="dcard" aria-pressed={x.id === sel.id} onClick={() => selectDesign(x.id)}>
+                {/* design: football legends, pool balls or money (each card shows a 3D thumbnail) */}
+                <div className="design-cards" role="group" aria-label="Design">
+                  {DESIGNS.map((x) => (
+                    <button key={x.id} type="button" className="design-card" aria-pressed={x.id === sel.id} onClick={() => selectDesign(x.id)}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {thumbs[x.id] && <img className="cimg" alt="" src={thumbs[x.id]} />}
-                      <span className="cinfo"><span className="cn">{x.name}</span><span className="cp">Price to be confirmed</span></span>
+                      {thumbs[x.id] ? <img alt="" src={thumbs[x.id]} /> : <span className="design-ph" aria-hidden="true" />}
+                      <span>{x.name}</span>
                     </button>
                   ))}
                 </div>
-                <div className="car-nav">
-                  <button type="button" className="nav-arrow" aria-label="Previous design" onClick={() => { carDir.current = -1; setCarStart((s) => (s - 1 + DESIGNS.length) % DESIGNS.length); }}>&larr;</button>
-                  <button type="button" className="nav-arrow" aria-label="Next design" onClick={() => { carDir.current = 1; setCarStart((s) => (s + 1) % DESIGNS.length); }}>&rarr;</button>
+                {/* keyboard and screen-reader way to pick a style of this design: hidden until you Tab into it */}
+                <div className="key-styles" role="group" aria-label="Choose a style">
+                  {picksFor(sel.id).map((p) => (
+                    <button key={pickLabel(p)} type="button" aria-pressed={isCurrent(p, sel)} onClick={() => choose(p)}>{pickLabel(p)}</button>
+                  ))}
                 </div>
+                <div className="btnrow">
+                  <Magnet padding={70} magnetStrength={4} maxOffset={12}>
+                    <a className="primary-btn" href="#order" onClick={go('order')}>Order this beanbag<span className="plus" aria-hidden="true">+</span></a>
+                  </Magnet>
+                  <button type="button" className="ghost-btn" onClick={open4K}>View in 4K</button>
+                </div>
+                <p className="fine">Live 3D concept, not a photograph of a finished product. Price, fabric and sizes to be confirmed.</p>
               </div>
-              <h2 className="title side"><span className="o">Made for</span><br />Your Room</h2>
             </div>
           </div>
           <p className="proto-note">Pre-launch prototype · Concept designs only · Prices, sizes and availability to be confirmed</p>
         </section>
 
         {/* decorative band whose speed and direction follow your scrolling */}
-        <div className="marquee rb-marquee" hidden={isOrder} aria-hidden="true">
+        <div className="marquee rb-marquee" aria-hidden="true">
           <ScrollVelocity
-            texts={['Sit different · Made for your room · Corduroy & microsuede', 'Football legends · Pool balls · Money prints · Your own design']}
+            texts={['Football legends · Pool balls · Money prints', 'Sit different · Made for your room · Cape Town']}
             velocity={40}
             separator="·"
             gap={24}
@@ -215,36 +166,7 @@ export default function SiteApp() {
           />
         </div>
 
-        <section className="make" id="make" hidden={isOrder}>
-          <div className="make-in">
-            <div className="make-copy">
-              <p className="mk-eyebrow">Make it yours</p>
-              <h2 className="title mk-title"><span className="o">Your</span> Way</h2>
-              <p className="desc">Customise one of our designs in your fabric and colour, or send us your own idea and we will work on it with you.</p>
-            </div>
-            <SpotlightCard className="mk-spot p-0! rounded-[28px]!" style={SPOT_STYLE} spotlightColor="#fbcfe8" intensity={0.22} spotlightSize={280}>
-              <a className="mk-card" href="#order"><span className="mk-n">01</span><b>Customise a design</b><span>Pick a design, fabric, colour and quantity, then send us your order request.</span><span className="mk-go">Start <span className="plus" aria-hidden="true">+</span></span></a>
-            </SpotlightCard>
-            <SpotlightCard className="mk-spot p-0! rounded-[28px]!" style={SPOT_STYLE} spotlightColor="#fbcfe8" intensity={0.22} spotlightSize={280}>
-              <a className="mk-card" href="#custom"><span className="mk-n">02</span><b>Request your own design</b><span>Describe your idea or add a reference image for a one-of-a-kind beanbag.</span><span className="mk-go">Start <span className="plus" aria-hidden="true">+</span></span></a>
-            </SpotlightCard>
-          </div>
-        </section>
-
-        <OrderPage
-          hidden={!isOrder}
-          stage={isOrder ? stage : null}
-          sel={sel}
-          order={order}
-          thumbs={thumbs}
-          onSelectDesign={selectDesign}
-          onFabric={setFabric}
-          onColour={setColour}
-          onPick={pickVariant}
-          onCustomFabric={(id) => setCustom({ fabric: id })}
-          onCustomColour={(id) => setCustom({ colour: id })}
-          onQty={(qty) => setOrder((o) => ({ ...o, qty }))}
-        />
+        <OrderSection sel={sel} shot={shot} />
       </main>
 
       <K4Viewer request={k4} onClose={() => setK4(null)} />
@@ -253,11 +175,11 @@ export default function SiteApp() {
 }
 
 /* rising bubbles behind the hero (skipped with reduced motion, paused when off screen) */
-function Bubbles({ active }: { active: boolean }) {
+function Bubbles() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const host = ref.current;
-    if (!host || !active) return;
+    if (!host) return;
     try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch {}
     let vis = true;
     const io = 'IntersectionObserver' in window ? new IntersectionObserver((es) => { vis = es[0].isIntersecting; }, { threshold: 0 }) : null;
@@ -275,6 +197,6 @@ function Bubbles({ active }: { active: boolean }) {
       timers.push(window.setTimeout(() => b.remove(), dur * 1000 + 60));
     }, 400);
     return () => { clearInterval(id); timers.forEach(clearTimeout); io?.disconnect(); host.replaceChildren(); };
-  }, [active]);
+  }, []);
   return <div className="bubbles" ref={ref} aria-hidden="true" />;
 }
