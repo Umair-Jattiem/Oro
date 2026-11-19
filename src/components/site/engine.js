@@ -528,7 +528,7 @@ function initHero(stage, canvas, spec0, theme0) {
       propsKey = d.props; bornAt = performance.now();
       for (var i = 0; i < n; i++) {
         var g = makeProp(list[i]); g.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3)); g.scale.setScalar(0.001); propsG.add(g);
-        props.push({ g: g, a: -Math.PI * 0.5 + (i + 0.5) / n * Math.PI * 2, s: g.userData.base * 0.9, cs: 0, delay: (first ? 250 : 0) + i * 45, spin: rand(0.25, 0.6), ph: rand(0, 6.28), key: pickKey(g.userData.pick) });
+        props.push({ g: g, a: -Math.PI * 0.5 + (i + 0.5) / n * Math.PI * 2, s: g.userData.base * 0.9, cs: 0, delay: (first ? 700 : 0) + i * 70, spin: rand(0.25, 0.6), ph: rand(0, 6.28), key: pickKey(g.userData.pick) });
       }
     }
     /* fit the ring on screen: beside the text on wide screens, centred on tablets and phones */
@@ -635,7 +635,10 @@ function initHero(stage, canvas, spec0, theme0) {
       if (!drag.on) { userRot += vel; vel *= 0.94; }
       pxs += (mx - pxs) * 0.05; pys += (my - pys) * 0.05;
       var bob = (reduce || kind === 'mat') ? 0 : Math.sin(t * 1.05) * 0.08, sway = reduce ? 0 : Math.sin(t * 0.5) * 0.3;
-      holder.position.y = bob; clipPlane.constant = -bob;
+      /* entrance: the beanbag floats up into place when the page opens, its shadow fading in beneath it */
+      var ik = reduce ? 1 : Math.min(1, (now - introT0) / 1500), ie = 1 - Math.pow(1 - ik, 3), rise = -2.8 * (1 - ie);
+      holder.position.y = bob + rise; clipPlane.constant = -(bob + rise);
+      shadowBlob.material.opacity = 0.55 * ie; floor.material.opacity = 0.4 * ie;
       holder.rotation.y = baseRot + userRot + sway + pxs * 0.6 + spinVal;
       shadowBlob.scale.setScalar(CAM[kind].shadow * (1 - bob * 0.5));
 
@@ -646,7 +649,8 @@ function initHero(stage, canvas, spec0, theme0) {
       if (!reduce && canHover && !hoverKey) ringA += dt * 0.03; // drift only with a mouse (it pauses under the cursor); touch screens keep the ring still so taps land
       for (var i = 0; i < props.length; i++) {
         var p = props[i], a = p.a + ringA, sel = p.key === selKey, hov = p.key === hoverKey;
-        p.g.position.set(Math.cos(a) * RING.rx, RING.cy + Math.sin(a) * RING.ry + (reduce ? 0 : Math.sin(t * 0.9 + p.ph) * 0.05), RING.z);
+        var pk = reduce ? 1 : Math.min(1, Math.max(0, (now - bornAt - p.delay) / 800)), pe = 1 - Math.pow(1 - pk, 3); // each style floats up as it appears
+        p.g.position.set(Math.cos(a) * RING.rx, RING.cy + Math.sin(a) * RING.ry + (reduce ? 0 : Math.sin(t * 0.9 + p.ph) * 0.05) - 1.6 * (1 - pe), RING.z);
         if (now - bornAt < p.delay && !reduce) continue;
         var leaving = sw.active && sw.leaving && !sw.swapped;
         var target = leaving ? 0 : p.s * (sel ? 1.45 : hov ? 1.22 : 1);
@@ -663,7 +667,7 @@ function initHero(stage, canvas, spec0, theme0) {
     var onVis = function () { document.hidden ? stop() : start(); };
     document.addEventListener('visibilitychange', onVis);
 
-    var d0 = byId(DESIGNS, spec0.id);
+    var d0 = byId(DESIGNS, spec0.id), introT0 = performance.now();
     resize(); baseRot = d0.rot || 0; selKey = specKey(spec0); install(spec0); buildProps(spec0.id, true); setTheme(theme0, true);
     camPos.set(0, RING.cy + 1.2, frameZ);
     var warmTimer = setTimeout(function () { warmStyles(renderer, spec0.fabric); }, 1500);

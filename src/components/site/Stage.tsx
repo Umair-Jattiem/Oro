@@ -46,6 +46,7 @@ export default function Stage({ hint, getInitial, onHero, onPick, onEngine, onHo
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false); // the still photo is only for browsers that cannot show 3D
   const pickRef = useRef(onPick);
   const hoverRef = useRef(onHover);
   useEffect(() => { pickRef.current = onPick; hoverRef.current = onHover; });
@@ -55,7 +56,8 @@ export default function Stage({ hint, getInitial, onHero, onPick, onEngine, onHo
     loadEngine().then((engine) => {
       if (cancelled) return;
       onEngine?.(engine);
-      if (!engine || !stageRef.current || !canvasRef.current) return;
+      if (!engine) { setFailed(true); return; }
+      if (!stageRef.current || !canvasRef.current) return;
       try {
         const { spec, theme } = getInitial();
         hero = engine.initHero(stageRef.current, canvasRef.current, spec, theme) as Hero;
@@ -67,6 +69,7 @@ export default function Stage({ hint, getInitial, onHero, onPick, onEngine, onHo
       } catch (e) {
         console.error(e);
         document.documentElement.classList.remove('gl-on');
+        setFailed(true);
       }
     });
     return () => { cancelled = true; if (hero) { hero.dispose(); onHero(null); } };
@@ -76,7 +79,7 @@ export default function Stage({ hint, getInitial, onHero, onPick, onEngine, onHo
   return (
     <div className="hero-center" id="stage" ref={stageRef}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="stage-fallback" src="/images/ols01-classic-8-ball.jpg" alt="Concept render of a black corduroy beanbag with a white circle and a black 8" hidden={ready} />
+      <img className="stage-fallback" src="/images/ols01-classic-8-ball.jpg" alt="Concept render of a black corduroy beanbag with a white circle and a black 8" hidden={!failed} />
       <canvas
         id="gl"
         ref={canvasRef}

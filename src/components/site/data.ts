@@ -81,7 +81,7 @@ export type Selection = { id: string; colour: string; fabric: string; player: st
 export type Theme = [string, string, string];
 export type Spec = { id: string; kind: string; patch: string; hex: string; fabric: string; num?: number; cur?: string; kit?: Kit };
 
-export const INITIAL_SELECTION: Selection = { id: 'legend', colour: 'black', fabric: 'corduroy', player: 'messi', ball: 8, cur: 'USD' };
+export const INITIAL_SELECTION: Selection = { id: 'ols01', colour: 'black', fabric: 'corduroy', player: 'messi', ball: 8, cur: 'USD' };
 
 export const playerOf = (s: Selection) => kitById(s.player);
 export const ballOf = (s: Selection) => BALLS[s.ball - 1] || BALLS[7];
