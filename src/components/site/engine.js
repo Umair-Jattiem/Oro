@@ -359,7 +359,7 @@ function buildModel(s) {
     return buildDome(s);
   }
 function disposeGroup(g) { g.traverse(function (o) { if (o.geometry) o.geometry.dispose(); }); }
-function blobTex() { return canvasTex(256, 256, function (g, w, h) { var r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); r.addColorStop(0, 'rgba(0,0,0,0.62)'); r.addColorStop(0.55, 'rgba(0,0,0,0.26)'); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(0, 0, w, h); }, false); }
+function blobTex() { return canvasTex(256, 256, function (g, w, h) { var r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); r.addColorStop(0, 'rgba(0,0,0,0.6)'); r.addColorStop(0.4, 'rgba(0,0,0,0.45)'); r.addColorStop(0.75, 'rgba(0,0,0,0.14)'); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(0, 0, w, h); }, false); }
 function dotTex() { return canvasTex(64, 64, function (g, w, h) { var r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, 'rgba(255,240,210,1)'); r.addColorStop(1, 'rgba(255,240,210,0)'); g.fillStyle = r; g.fillRect(0, 0, w, h); }, false); }
 function glowTex() {
     return canvasTex(128, 256, function (g, w, h) {
@@ -546,7 +546,7 @@ function initHero(stage, canvas, spec0, theme0) {
       current = model || buildModel(s); holder.add(current); kind = s.kind;
       var f = CAM[kind].shadow; shadowBlob.scale.set(f, f, 1);
       // a real cast shadow on an invisible floor grounds the beanbag (the soft blob stays underneath as contact shadow)
-      var isMat = kind === 'mat'; floor.visible = true; floor.material.opacity = isMat ? 0.55 : 0.3; glow.visible = isMat; shadowBlob.position.y = 0.003; shadowBlob.material.opacity = isMat ? 0.45 : 0.62; // contact shadow sits on the floor, right under the beanbag
+      var isMat = kind === 'mat'; floor.visible = isMat; floor.material.opacity = 0.55; glow.visible = isMat; shadowBlob.position.y = 0.003; shadowBlob.material.opacity = isMat ? 0.45 : 0.8; // on the hero only one soft shadow, centred under the beanbag (no hard cast shadow off to the side)
     }
     function set(s, designChanged, th) {
       selKey = specKey(s);
@@ -640,9 +640,9 @@ function initHero(stage, canvas, spec0, theme0) {
       var ik = reduce ? 1 : Math.min(1, (now - introT0) / 1500), ie = 1 - Math.pow(1 - ik, 3), rise = -2.8 * (1 - ie);
       holder.position.y = bob + rise; clipPlane.constant = -(bob + rise);
       // a real shadow tightens and darkens as the beanbag settles, and spreads and fades as it floats up
-      shadowBlob.material.opacity = Math.min(0.72, 0.62 * (1 - bob * 3)) * ie; floor.material.opacity = 0.3 * ie;
+      shadowBlob.material.opacity = 0.8 * (1 - bob * 2) * ie; 
       holder.rotation.y = baseRot + userRot + sway + pxs * 0.6 + spinVal;
-      shadowBlob.scale.setScalar(CAM[kind].shadow * (1 + bob * 0.9));
+      shadowBlob.scale.set(CAM[kind].shadow * 1.15 * (1 + bob * 0.6), CAM[kind].shadow * 0.95 * (1 + bob * 0.6), 1);
 
       camPos.x += (0 - camPos.x) * 0.06; camPos.y += (RING.cy + 1.2 - camPos.y) * 0.06; camPos.z += (frameZ - camPos.z) * 0.06;
       camLook.x += (0 - camLook.x) * 0.06; camLook.y += (RING.cy - camLook.y) * 0.06; camLook.z += (0 - camLook.z) * 0.06;
