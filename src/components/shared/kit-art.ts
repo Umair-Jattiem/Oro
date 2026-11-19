@@ -115,7 +115,7 @@ export function kitBadge(kit: Kit): Badge {
 }
 
 /* ---------- money print: banknotes scattered and overlapping, wrapping seamlessly ---------- */
-export function scatterBills(g: G, w: number, h: number, base: string, draw: (g: G, x: number, y: number, bw: number, bh: number) => void) {
+export function scatterBills(g: G, w: number, h: number, base: string, draw: (g: G, x: number, y: number, bw: number, bh: number, i: number) => void) {
   g.fillStyle = base; g.fillRect(0, 0, w, h);
   const bw = w * 0.3, bh = bw * 0.43;
   let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -125,7 +125,7 @@ export function scatterBills(g: G, w: number, h: number, base: string, draw: (g:
       if (x + dx < -bw || x + dx > w + bw || y + dy < -bw || y + dy > h + bw) continue;
       g.save(); g.translate(x + dx, y + dy); g.rotate(rot);
       g.shadowColor = 'rgba(0,0,0,0.38)'; g.shadowBlur = w * 0.01; g.shadowOffsetY = w * 0.004;
-      draw(g, -bw / 2, -bh / 2, bw, bh);
+      draw(g, -bw / 2, -bh / 2, bw, bh, i);
       g.restore();
     }
   }

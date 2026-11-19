@@ -11,7 +11,7 @@ import { COLOURS, DESIGNS, CURRENCIES, PROPSETS, byId } from './data';
 import { KITS, kitById } from '../shared/kits';
 import { drawBadge, drawBadgeBump, kitBadge, scatterBills } from '../shared/kit-art';
 import { drawKitFabric, drawKitDecal, drawKitBall } from '../shared/kit-art';
-import { bagPoint, smoothstep } from '../shared/beanbag-shape';
+import { bagPoint, sitPoint, smoothstep } from '../shared/beanbag-shape';
 
 /* soft studio reflections so fabric and patches pick up real highlights instead of looking flat */
 var envCache = new WeakMap();
@@ -70,9 +70,29 @@ var plainMats = {};
 function plainMat(hex, rough) { var k = hex + rough; return plainMats[k] || (plainMats[k] = new T.MeshStandardMaterial({ color: hex, roughness: rough })); }
 function darkenHex(hex, f) { var c = parseInt(hex.slice(1), 16); function q(v) { v = Math.max(0, Math.min(255, Math.round(v * f))); return ('0' + v.toString(16)).slice(-2); } return '#' + q(c >> 16 & 255) + q(c >> 8 & 255) + q(c & 255); }
 function curInfo(cur) { if (typeof CURRENCIES !== 'undefined' && cur) for (var i = 0; i < CURRENCIES.length; i++) if (CURRENCIES[i].id === cur) return CURRENCIES[i]; return { sym: '$', paper: '#EFEACF', ink: '#3F6E4B' }; }
-function drawBill(g, x, y, w, h, cur) {
+/* photos of each currency's note (front, and back where there is one), loaded once before the engine starts */
+var noteImgs = {}, notesPromise = null;
+function loadNotes() {
+  if (notesPromise) return notesPromise;
+  notesPromise = Promise.all(CURRENCIES.map(function (c) {
+    return Promise.all((c.img || []).map(function (src) {
+      return new Promise(function (res) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { res(null); }; im.src = src; });
+    })).then(function (list) { noteImgs[c.id] = list.filter(Boolean); });
+  }));
+  return notesPromise;
+}
+function noteImg(cur, i) { var l = noteImgs[cur]; return l && l.length ? l[(i || 0) % l.length] : null; }
+function noteAspect(cur) { var im = noteImg(cur, 0); return im ? im.naturalWidth / im.naturalHeight : 1 / 0.43; }
+function drawBill(g, x, y, w, h, cur, i) {
     var CI = curInfo(cur);
     function rr(a, b, c, d, r) { g.beginPath(); g.moveTo(a + r, b); g.arcTo(a + c, b, a + c, b + d, r); g.arcTo(a + c, b + d, a, b + d, r); g.arcTo(a, b + d, a, b, r); g.arcTo(a, b, a + c, b, r); g.closePath(); }
+    var im = noteImg(cur, i);
+    if (im) { // the real note at its own proportions, centred in the space given; the paper fill casts the drop shadow
+      var ah = w * im.naturalHeight / im.naturalWidth, ty = y + (h - ah) / 2;
+      rr(x, ty, w, ah, ah * 0.03); g.fillStyle = CI.paper; g.fill();
+      g.save(); g.shadowColor = "transparent"; rr(x, ty, w, ah, ah * 0.03); g.clip(); g.drawImage(im, x, ty, w, ah); g.restore();
+      return;
+    }
     var dk = CI.ink, gr = g.createLinearGradient(x, y, x + w, y + h); gr.addColorStop(0, CI.paper); gr.addColorStop(1, darkenHex(CI.paper, 0.9));
     rr(x, y, w, h, h * 0.05); g.fillStyle = gr; g.fill();
     g.strokeStyle = dk; g.lineWidth = h * 0.035; rr(x + h * 0.05, y + h * 0.05, w - h * 0.1, h - h * 0.1, h * 0.03); g.stroke();
@@ -169,7 +189,7 @@ var clipPlane = new T.Plane(new T.Vector3(0, 1, 0), 0), clipCache = {};
 function dollarMat(fabric, cur) {
     var cord = fabric === 'corduroy', CI = curInfo(cur);
     var map = canvasTex(2048, 1024, function (g, w, h) {
-      scatterBills(g, w, h, darkenHex(CI.paper, 0.62), function (g2, x, y, bw, bh) { drawBill(g2, x, y, bw, bh, cur); });
+      scatterBills(g, w, h, darkenHex(CI.paper, 0.62), function (g2, x, y, bw, bh, i) { drawBill(g2, x, y, bw, bh, cur, i); });
       if (cord) { g.save(); g.globalAlpha = 0.5; drawWales(g, 0, 0, w, h, 48); g.restore(); }
       addNap(g, w, h, cord ? 6 : 10, 0);
     });
@@ -428,7 +448,7 @@ function getCoinTex(cur) {
       g.fillStyle = '#9A7420'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '800 140px Manrope, Arial, sans-serif'; g.fillText(CI.sym, 128, 136);
     }));
   }
-function getNoteTex(cur) { return noteTexC[cur] || (noteTexC[cur] = canvasTex(512, 218, function (g) { drawBill(g, 0, 0, 512, 218, cur); })); }
+function getNoteTex(cur, i) { var k = cur + (i || 0), H = Math.round(768 / noteAspect(cur)); return noteTexC[k] || (noteTexC[k] = canvasTex(768, H, function (g) { drawBill(g, 0, 0, 768, H, cur, i); })); }
 function propFabric(hex) {
     if (pfCache[hex]) return pfCache[hex];
     var rgb = rgbOf(hex), lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
@@ -459,8 +479,8 @@ function makeProp(sp) {
       var cap = new T.MeshStandardMaterial({ map: getCoinTex(sp.cur), roughness: 0.4, metalness: 0.2 });
       m = new T.Mesh(geo('coin', function () { return new T.CylinderGeometry(1, 1, 0.16, 40); }), [plainMat('#D9B24C', 0.35), cap, cap]); m.rotation.x = Math.PI / 2; base = 0.24;
     } else if (sp.t === 'note') {
-      var side = plainMat(darkenHex(curInfo(sp.cur).paper, 0.85), 0.8), face = new T.MeshStandardMaterial({ map: getNoteTex(sp.cur), roughness: 0.8 });
-      m = new T.Mesh(geo('note', function () { return new T.BoxGeometry(1, 0.43, 0.02); }), [side, side, side, side, face, face]); base = 0.62;
+      var side = plainMat(darkenHex(curInfo(sp.cur).paper, 0.85), 0.8), face = new T.MeshStandardMaterial({ map: getNoteTex(sp.cur, 0), roughness: 0.8 }), back = new T.MeshStandardMaterial({ map: getNoteTex(sp.cur, 1), roughness: 0.8 });
+      m = new T.Mesh(geo('note' + sp.cur, function () { return new T.BoxGeometry(1, 1 / noteAspect(sp.cur), 0.02); }), [side, side, side, side, face, back]); base = 0.62;
     } else if (sp.t === 'heart') {
       m = new T.Mesh(heartGeo(), new T.MeshPhysicalMaterial({ color: sp.hex, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1 })); m.userData.own = true; base = 0.24;
     } else if (sp.t === 'spark') {
@@ -543,11 +563,15 @@ function initHero(stage, canvas, spec0, theme0) {
     }
     function install(s, model) {
       if (current) { holder.remove(current); disposeGroup(current); }
-      current = model || buildModel(s); holder.add(current); kind = s.kind;
+      current = model || buildModel(s); holder.add(current); kind = s.kind; sitShape();
       var f = CAM[kind].shadow; shadowBlob.scale.set(f, f, 1);
       // a real cast shadow on an invisible floor grounds the beanbag (the soft blob stays underneath as contact shadow)
       var isMat = kind === 'mat'; floor.visible = isMat; floor.material.opacity = 0.55; glow.visible = isMat; shadowBlob.position.y = 0.003; shadowBlob.material.opacity = isMat ? 0.45 : 0.8; // on the hero only one soft shadow, centred under the beanbag (no hard cast shadow off to the side)
     }
+    /* sitting: the seat sinks in with a little give (sinks slightly past, then settles), and rises back up when you stand */
+    var settle = 0, settleTo = 0;
+    function sitAmount() { return settleTo > 0 ? backOut(settle, 1.3) : settle * settle * (3 - 2 * settle); }
+    function sitShape() { var ms = current && current.userData.morphs; if (ms) { var v = sitAmount(); ms.forEach(function (m) { if (v > 0 || m.base) applySit(m, v); }); } }
     function set(s, designChanged, th) {
       selKey = specKey(s);
       var nextProps = byId(DESIGNS, s.id).props;
@@ -635,16 +659,19 @@ function initHero(stage, canvas, spec0, theme0) {
 
       if (!drag.on) { userRot += vel; vel *= 0.94; }
       pxs += (mx - pxs) * 0.05; pys += (my - pys) * 0.05;
-      var bob = (reduce || kind === 'mat') ? 0 : Math.sin(t * 1.05) * 0.08, sway = reduce ? 0 : Math.sin(t * 0.5) * 0.3;
+      if (settle !== settleTo) { var ds = settleTo - settle, st = reduce ? 1 : dt / (settleTo > 0 ? 0.75 : 0.6); settle = Math.abs(ds) <= st ? settleTo : settle + (ds > 0 ? st : -st); sitShape(); }
+      var seated = Math.min(1, settle * 1.5); // someone in it: it stops floating and turns its seat to you
+      var bob = (reduce || kind === 'mat') ? 0 : Math.sin(t * 1.05) * 0.08 * (1 - seated), sway = reduce ? 0 : Math.sin(t * 0.5) * 0.3 * (1 - seated);
+      if (settleTo > 0 && !drag.on) { var TAU = Math.PI * 2, face = Math.round((baseRot + userRot) / TAU) * TAU - baseRot; userRot += (face - userRot) * Math.min(1, dt * 4); vel *= 0.8; }
       /* entrance: the beanbag floats up into place when the page opens, its shadow fading in beneath it */
       var ik = reduce ? 1 : Math.min(1, (now - introT0) / 1500), ie = 1 - Math.pow(1 - ik, 3), rise = -2.8 * (1 - ie);
       holder.position.y = bob + rise; clipPlane.constant = -(bob + rise);
       // a real shadow tightens and darkens as the beanbag settles, and spreads and fades as it floats up
       shadowBlob.material.opacity = 0.8 * (1 - bob * 2) * ie; 
-      holder.rotation.y = baseRot + userRot + sway + pxs * 0.6 + spinVal;
+      holder.rotation.y = baseRot + userRot + sway + pxs * 0.6 * (1 - seated) + spinVal;
       shadowBlob.scale.set(CAM[kind].shadow * 1.15 * (1 + bob * 0.6), CAM[kind].shadow * 0.95 * (1 + bob * 0.6), 1);
 
-      camPos.x += (0 - camPos.x) * 0.06; camPos.y += (RING.cy + 1.2 - camPos.y) * 0.06; camPos.z += (frameZ - camPos.z) * 0.06;
+      camPos.x += (0 - camPos.x) * 0.06; camPos.y += (RING.cy + 1.2 + seated * 0.7 - camPos.y) * 0.06; camPos.z += (frameZ - camPos.z) * 0.06;
       camLook.x += (0 - camLook.x) * 0.06; camLook.y += (RING.cy - camLook.y) * 0.06; camLook.z += (0 - camLook.z) * 0.06;
       camera.position.set(camPos.x + pxs * 0.35, camPos.y - pys * 0.18, camPos.z); camera.lookAt(camLook);
 
@@ -707,7 +734,7 @@ function initHero(stage, canvas, spec0, theme0) {
       var mid = px(0, RING.cy, 0), back = px(0, 0, -1.1), front = px(0, 0, 0.9);
       return { x: mid.x, mid: mid.y, horizon: back.y, floor: front.y, w: w, h: h };
     }
-    return { set: set, anchor: anchor, busy: function () { return false; }, onPick: function (fn) { pickCb = fn; }, onHover: function (fn) { hoverCb = fn; }, warm: function (fabric) { warmStyles(renderer, fabric); }, dispose: dispose };
+    return { set: set, anchor: anchor, busy: function () { return false; }, onPick: function (fn) { pickCb = fn; }, onHover: function (fn) { hoverCb = fn; }, warm: function (fabric) { warmStyles(renderer, fabric); }, toggleSit: function () { settleTo = settleTo > 0 ? 0 : 1; return settleTo > 0; }, dispose: dispose };
   }
 function makeThumbs(specs, o, done) {
     var W = o.W, H = o.H, zoom = o.zoom || 1, r;
@@ -900,6 +927,19 @@ function bagBodyMat(s) {
     }
     return bagMatCache[k];
   }
+/* someone sitting in it: bend the resting shape (kept from the first call) into the seated one, s 0..1 */
+function applySit(m, s) {
+    var p = m.geo.attributes.position, col = m.ao ? m.geo.attributes.color : null, o = [0, 0, 0, 0];
+    if (!m.base) { m.base = p.array.slice(); if (col) m.baseCol = col.array.slice(); }
+    var b = m.base, bc = m.baseCol, n = p.count;
+    for (var i = 0; i < n; i++) {
+      var j = i * 3;
+      if (s <= 0) { p.setXYZ(i, b[j], b[j + 1], b[j + 2]); if (col) col.setXYZ(i, bc[j], bc[j + 1], bc[j + 2]); continue; }
+      sitPoint(b[j], b[j + 1], b[j + 2], s, o); p.setXYZ(i, o[0], o[1], o[2]);
+      if (col) { var f = 1 + Math.max(-0.4, o[3] * 9); col.setXYZ(i, bc[j] * f, bc[j + 1] * f, bc[j + 2] * f); }
+    }
+    p.needsUpdate = true; if (col) col.needsUpdate = true; m.geo.computeVertexNormals(); m.geo.computeBoundingSphere();
+  }
 /* the beanbag shape is the same for every style: work it out once, then hand out cheap copies */
 var shapeCache = {};
 function shapedCopy(key, make, off, ao) {
@@ -981,7 +1021,7 @@ function renderStudio(spec, W, H) {
     } finally { r.dispose(); try { r.forceContextLoss(); } catch (e) {} }
   }
 
-export { webglOK, initHero, makeThumbs, renderStudio, snapBag };
+export { webglOK, initHero, makeThumbs, renderStudio, snapBag, loadNotes };
 
 /* embroidered badge for a decal key ('kitpatch:messi' or 'circle:8') and its relief map */
 function badgeFor(full) {

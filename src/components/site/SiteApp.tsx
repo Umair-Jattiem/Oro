@@ -31,6 +31,7 @@ export default function SiteApp() {
   const [shot, setShot] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const [sitting, setSitting] = useState(false);
 
   const selRef = useRef(sel), heroRef = useRef<Hero | null>(null);
   const rootRef = useRef<HTMLDivElement>(null), tipRef = useRef<HTMLDivElement>(null);
@@ -115,7 +116,7 @@ export default function SiteApp() {
       <main>
         <section className="hero2" id="home">
           <Backdrop {...sceneOf(sel)} anchor={anchor} />
-          <Particles kind={d.variant === 'cur' ? 'notes' : 'dust'} color={curOf(sel).paper} />
+          <Particles kind={d.variant === 'cur' ? 'notes' : 'dust'} color={curOf(sel).paper} imgs={curOf(sel).img} />
           <Stage hint={d.variant === 'player' ? 'Tap a ball to change player · drag to spin' : d.variant === 'ball' ? 'Tap a ball to change colour · drag to spin' : 'Tap a note to change currency · drag to spin'} getInitial={getInitial} onHero={onHero} onPick={choose} onEngine={onEngine} onHover={onHover} />
           <div className="ring-tip" ref={tipRef} hidden aria-hidden="true" />
           <div className="hero-in">
@@ -151,6 +152,7 @@ export default function SiteApp() {
                   <Magnet padding={70} magnetStrength={4} maxOffset={12}>
                     <a className="primary-btn" href="#order" onClick={go('order')}>Order this beanbag<span className="plus" aria-hidden="true">+</span></a>
                   </Magnet>
+                  <button type="button" className="ghost-btn" aria-pressed={sitting} onClick={() => { if (heroRef.current) setSitting(heroRef.current.toggleSit()); }}>{sitting ? 'Stand up' : 'Sit on it'}</button>
                   <button type="button" className="ghost-btn" onClick={open4K}>View in 4K</button>
                 </div>
                 <p className="fine">Live 3D concept, not a photograph of a finished product. Price, fabric and sizes to be confirmed.</p>
@@ -184,9 +186,9 @@ export default function SiteApp() {
   );
 }
 
-/* themed particles over the backdrop: drifting light dust (stadium, court, pool hall) or banknotes falling
-   in the chosen currency's colour (vault). Skipped with reduced motion, paused when off screen. */
-function Particles({ kind, color }: { kind: 'dust' | 'notes'; color: string }) {
+/* themed particles over the backdrop: drifting light dust (stadium, court, pool hall) or the chosen currency's
+   notes falling (vault). Skipped with reduced motion, paused when off screen. */
+function Particles({ kind, color, imgs }: { kind: 'dust' | 'notes'; color: string; imgs: string[] }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const host = ref.current;
@@ -205,7 +207,7 @@ function Particles({ kind, color }: { kind: 'dust' | 'notes'; color: string }) {
         const wpx = rand(26, 48);
         p.className = 'fall-note';
         p.style.width = wpx.toFixed(0) + 'px'; p.style.height = (wpx * 0.45).toFixed(0) + 'px';
-        p.style.background = color;
+        p.style.background = `${color} center / 100% 100% no-repeat url(${imgs[Math.floor(Math.random() * imgs.length)]})`;
         p.style.setProperty('--spin', rand(-260, 260).toFixed(0) + 'deg');
         p.style.opacity = rand(0.35, 0.75).toFixed(2);
       } else {
@@ -219,6 +221,6 @@ function Particles({ kind, color }: { kind: 'dust' | 'notes'; color: string }) {
       timers.push(window.setTimeout(() => p.remove(), dur * 1000 + 60));
     }, kind === 'notes' ? 520 : 260);
     return () => { clearInterval(id); timers.forEach(clearTimeout); io?.disconnect(); host.replaceChildren(); };
-  }, [kind, color]);
+  }, [kind, color, imgs]);
   return <div className="bubbles" ref={ref} aria-hidden="true" />;
 }

@@ -10,7 +10,7 @@ export type Design = {
   props: string; blurb: string;
 };
 export type Ball = { n: number; name: string; hex: string; stripe?: boolean };
-export type Currency = { id: string; name: string; sym: string; paper: string; ink: string; theme: string };
+export type Currency = { id: string; name: string; sym: string; paper: string; ink: string; theme: string; img: string[] };
 export type Pick = { player?: string; ball?: number; cur?: string };
 type Prop = { t: string; n?: number; hex?: string; stripe?: boolean; cur?: string; kit?: Kit; pick?: Pick };
 type PropSet = Prop[] & { unique?: boolean };
@@ -48,11 +48,11 @@ export const BALLS: Ball[] = [
 const ballByN = (n: number) => BALLS.find((b) => b.n === n) || BALLS[0];
 /* the three football legends */
 export const PLAYERS: Kit[] = ['messi', 'ronaldo', 'neymar'].map(kitById);
-/* stylised notes in each currency's colour: original artwork, not copies of real banknotes */
+/* each currency's note: photos of the front (and back) in /images/notes, used on the fabric, the ring and the falling notes */
 export const CURRENCIES: Currency[] = [
-  { id: 'EUR', name: 'Euro',   sym: '€', paper: '#DDE6F2', ink: '#2F4F86', theme: '#2F6FC0' },
-  { id: 'ZAR', name: 'Rand',   sym: 'R', paper: '#ECDDC6', ink: '#7A4B2A', theme: '#B07A3C' },
-  { id: 'USD', name: 'Dollar', sym: '$', paper: '#EFEACF', ink: '#3F6E4B', theme: '#1A9A5E' },
+  { id: 'EUR', name: 'Euro',   sym: '€', paper: '#DDE6F2', ink: '#2F4F86', theme: '#2F6FC0', img: ['/images/notes/eur-front.jpg'] },
+  { id: 'ZAR', name: 'Rand',   sym: 'R', paper: '#ECDDC6', ink: '#7A4B2A', theme: '#B07A3C', img: ['/images/notes/zar-front.jpg', '/images/notes/zar-back.jpg'] },
+  { id: 'USD', name: 'Dollar', sym: '$', paper: '#EFEACF', ink: '#3F6E4B', theme: '#1A9A5E', img: ['/images/notes/usd-front.jpg', '/images/notes/usd-back.jpg'] },
 ];
 
 /* The ring around the beanbag shows the styles of the chosen design (see `props` on each design):

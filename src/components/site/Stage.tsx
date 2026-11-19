@@ -10,25 +10,23 @@ export type Hero = {
   onHover: (fn: (p: Pick | null, x: number, y: number) => void) => void;
   warm: (fabric: string) => void;
   anchor: () => Anchor;
+  toggleSit: () => boolean;
   dispose: () => void;
 };
 /* where the beanbag sits inside the stage, in pixels: centre x/y and the floor line just behind it */
 export type Anchor = { x: number; mid: number; horizon: number; floor: number; w: number; h: number };
 export type Engine = typeof import('./engine');
 
-/* Load the 3D engine once (browser only) after the fonts used on the textures are ready. */
+/* Load the 3D engine once (browser only) after the fonts and banknote photos used on the textures are ready. */
 let enginePromise: Promise<Engine | null> | null = null;
 export function loadEngine(): Promise<Engine | null> {
   if (!enginePromise) {
     enginePromise = (async () => {
       const mod = await import('./engine');
       if (!mod.webglOK()) return null;
-      if (document.fonts?.load) {
-        await Promise.race([
-          Promise.all([document.fonts.load('800 80px Manrope'), document.fonts.load('400 14px "DM Mono"')]),
-          new Promise((r) => setTimeout(r, 2500)),
-        ]);
-      }
+      const waits: Promise<unknown>[] = [mod.loadNotes()];
+      if (document.fonts?.load) waits.push(document.fonts.load('800 80px Manrope'), document.fonts.load('400 14px "DM Mono"'));
+      await Promise.race([Promise.all(waits), new Promise((r) => setTimeout(r, 2500))]);
       return mod;
     })().catch((e) => { console.error(e); return null; });
   }

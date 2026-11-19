@@ -42,13 +42,34 @@ export function bagPoint(nx: number, ny: number, nz: number, s: number, off: num
   const detail = -fade * 0.012 * groove + folds - gather * 0.03 + fine;
 
   const r = base + lumps + detail + dimple + off;
-  let x = nx * r, y = ny * r, z = nz * r;
+  let x = nx * r, z = nz * r;
+  const y = ny * r;
   z -= 0.08 * smoothstep(0, 1, y);   // leans back a little
   x += 0.03 * smoothstep(0.2, 1, y); // and not perfectly symmetric
-  if (s > 0) {
-    y -= s * 0.22 * smoothstep(-0.3, 1, y);
-    y -= s * 0.19 * Math.exp(-(x * x + (z - 0.05) * (z - 0.05)) / 0.24) * smoothstep(0.1, 1, ny);
-    const k = 1 + s * 0.11 * (1 - Math.min(1, Math.abs(y + 0.1))); x *= k; z *= k;
-  }
   out[0] = x; out[1] = y; out[2] = z; out[3] = detail + dimple * 0.5;
+  if (s > 0) { sitPoint(x, y, z, s, sitOut); out[0] = sitOut[0]; out[1] = sitOut[1]; out[2] = sitOut[2]; out[3] += sitOut[3]; }
+}
+const sitOut = [0, 0, 0, 0];
+
+/* Someone sitting in the beanbag (s 0..1), applied to a point of the resting shape. Only the top front, where a
+   person sits, sinks into a seat; the filling it pushes away lifts the back into a backrest and bulges the sides and
+   the front lip out, and the fabric bunches into folds around the rim of the seat. The front is +z.
+   out = [x, y, z, crease] where crease (negative = darker) shades the seat and its folds. */
+export function sitPoint(x: number, y: number, z: number, s: number, out: number[]) {
+  const sx = x / 0.48, sz = (z - 0.42) / 0.4, r2 = sx * sx + sz * sz;
+  const seat = Math.exp(-r2) * smoothstep(-0.1, 0.5, y);      // 1 in the middle of the seat, 0 away from it
+  const rim = seat * (1 - seat) * 4;                            // strongest on the edge of the seat
+  const ang = Math.atan2(sz, sx);
+  const folds = Math.pow(Math.abs(Math.sin(ang * 4 + vnoise(x * 3 + 1, y * 3, z * 3 + 4) * 3)), 6) * rim;
+  const back = smoothstep(0.15, -0.5, z) * smoothstep(0.05, 0.8, y); // behind the seat: becomes the backrest
+  const mid = Math.exp(-((y - 0.12) * (y - 0.12)) / 0.2);           // the belly of the bag, where filling moves to
+  const side = smoothstep(0.3, 0.95, Math.abs(x)) * mid;
+  const lip = smoothstep(0.3, 0.95, z) * mid;
+
+  let dy = -0.44 * seat - 0.03 * folds + 0.15 * back - 0.03 * smoothstep(-0.6, 0.9, y);
+  let dz = -0.08 * seat - 0.05 * back + 0.08 * lip;
+  const kx = 1 + 0.08 * side + 0.03 * mid;
+  dy *= s; dz *= s;
+  out[0] = x * (1 + s * (kx - 1)); out[1] = y + dy; out[2] = (z + dz) * (1 + s * 0.03 * mid);
+  out[3] = -s * (0.022 * seat + 0.03 * folds + 0.012 * rim);
 }
