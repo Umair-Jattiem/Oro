@@ -5,7 +5,7 @@ import {
   DESIGNS, INITIAL_SELECTION, byId, curOf, designName, pickLabel, picksFor, sceneOf, specOf, themeOf,
   type Pick, type Selection,
 } from './data';
-import Stage, { type Engine, type Hero } from './Stage';
+import Stage, { type Anchor, type Engine, type Hero } from './Stage';
 import OrderSection from './OrderSection';
 import { FabricPills } from './controls';
 import K4Viewer, { type K4Request } from '../shared/K4Viewer';
@@ -30,6 +30,7 @@ export default function SiteApp() {
   const [engine, setEngine] = useState<Engine | null>(null);
   const [shot, setShot] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
 
   const selRef = useRef(sel), heroRef = useRef<Hero | null>(null);
   const rootRef = useRef<HTMLDivElement>(null), tipRef = useRef<HTMLDivElement>(null);
@@ -72,7 +73,14 @@ export default function SiteApp() {
     el.textContent = pickLabel(p); el.hidden = false;
     el.style.transform = `translate(${Math.round(x + 16)}px, ${Math.round(y - 12)}px)`;
   }, []);
-  const onHero = useCallback((h: Hero | null) => { heroRef.current = h; }, []);
+  const onHero = useCallback((h: Hero | null) => { heroRef.current = h; setAnchor(h ? h.anchor() : null); }, []);
+  /* the painted floor follows where the 3D beanbag actually sits, so re-measure when the window changes size */
+  useEffect(() => {
+    let t = 0;
+    const onResize = () => { clearTimeout(t); t = window.setTimeout(() => { const h = heroRef.current; if (h) setAnchor(h.anchor()); }, 300); };
+    window.addEventListener('resize', onResize);
+    return () => { clearTimeout(t); window.removeEventListener('resize', onResize); };
+  }, []);
   /* once the 3D engine is ready: remember it, and render a small 3D thumbnail for each design card */
   const onEngine = useCallback((e: Engine | null) => {
     setEngine(e);
@@ -106,7 +114,7 @@ export default function SiteApp() {
 
       <main>
         <section className="hero2" id="home">
-          <Backdrop {...sceneOf(sel)} />
+          <Backdrop {...sceneOf(sel)} anchor={anchor} />
           <Particles kind={d.variant === 'cur' ? 'notes' : 'dust'} color={curOf(sel).paper} />
           <Stage hint={d.variant === 'player' ? 'Tap a ball to change player · drag to spin' : d.variant === 'ball' ? 'Tap a ball to change colour · drag to spin' : 'Tap a note to change currency · drag to spin'} getInitial={getInitial} onHero={onHero} onPick={choose} onEngine={onEngine} onHover={onHover} />
           <div className="ring-tip" ref={tipRef} hidden aria-hidden="true" />

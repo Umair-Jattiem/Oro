@@ -211,7 +211,8 @@ function poolhall(g: G, geo: Geo) {
   for (let i = 0; i < 1200; i++) { g.fillStyle = `rgba(0,0,0,${0.03 + rnd() * 0.05})`; g.fillRect(cx - nearHalf + rnd() * nearHalf * 2, hz + rnd() * (h - hz), 1.5, 1.5); }
   g.fillStyle = 'rgba(255,214,150,0.18)'; g.fillRect(cx - farHalf, hz - rail * 0.6, farHalf * 2, 2 * k);
   g.fillStyle = '#050505';
-  [[cx - farHalf, hz], [cx + farHalf, hz], [cx, hz - rail * 0.25]].forEach(([x, y]) => { g.beginPath(); g.ellipse(x, y, 16 * k, 8 * k, 0, 0, 7); g.fill(); });
+  // only the two far corner pockets (a middle pocket would sit right under the beanbag and read as a stray shadow)
+  [[cx - farHalf, hz], [cx + farHalf, hz]].forEach(([x, y]) => { g.beginPath(); g.ellipse(x, y, 13 * k, 6 * k, 0, 0, 7); g.fill(); });
   vignette(g, geo, 0.7);
 }
 

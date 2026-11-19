@@ -9,8 +9,11 @@ export type Hero = {
   onPick: (fn: (p: Pick) => void) => void;
   onHover: (fn: (p: Pick | null, x: number, y: number) => void) => void;
   warm: (fabric: string) => void;
+  anchor: () => Anchor;
   dispose: () => void;
 };
+/* where the beanbag sits inside the stage, in pixels: centre x/y and the floor line just behind it */
+export type Anchor = { x: number; mid: number; horizon: number; floor: number; w: number; h: number };
 export type Engine = typeof import('./engine');
 
 /* Load the 3D engine once (browser only) after the fonts used on the textures are ready. */

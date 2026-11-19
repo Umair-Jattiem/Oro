@@ -3,18 +3,23 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Scene } from './data';
 import { drawSun, paintScene, type Geo } from './backdrops';
+import type { Anchor } from './Stage';
 
 const SCENES: Scene[] = ['poolhall', 'favela', 'cr7', 'sol', 'vault'];
 
-/* Where the beanbag sits for this screen (must match the 3D framing in engine.js: beside the text on wide
-   screens, centred inside the stage on tablets and phones). */
-function measure(host: HTMLElement): Geo {
+/* Where the beanbag sits for this screen. With the 3D engine running, its own measurement (`anchor`) is used, so the
+   painted floor line lands just behind the beanbag; before that (or without 3D) an estimate of the same framing. */
+function measure(host: HTMLElement, anchor: Anchor | null): Geo {
   const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);
+  const stage = host.parentElement?.querySelector('#stage') as HTMLElement | null;
+  if (anchor && stage) {
+    const left = stage.offsetLeft, top = stage.offsetTop;
+    return { w, h, cx: left + anchor.x, cy: top + anchor.mid, hz: top + anchor.horizon };
+  }
   if (window.innerWidth >= 1100 && window.innerWidth / window.innerHeight > 1.2) {
     const cy = h * 0.545;
     return { w, h, cx: w * 0.68, cy, hz: cy + h * 0.13 };
   }
-  const stage = host.parentElement?.querySelector('#stage') as HTMLElement | null;
   const top = stage ? stage.offsetTop : h * 0.1, sh = stage ? stage.offsetHeight : h * 0.6;
   const cy = top + sh * 0.51;
   return { w, h, cx: w / 2, cy, hz: cy + sh * 0.15 };
@@ -24,7 +29,7 @@ function measure(host: HTMLElement): Geo {
  * The painted world behind the beanbag. Two canvases crossfade when the scene changes; every scene is painted
  * once per screen size (in idle moments after load), so switching never waits on painting.
  */
-export default function Backdrop({ scene, accent }: { scene: Scene; accent: string }) {
+export default function Backdrop({ scene, accent, anchor }: { scene: Scene; accent: string; anchor: Anchor | null }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvases = useRef<(HTMLCanvasElement | null)[]>([null, null]);
   const sunRef = useRef<HTMLCanvasElement>(null);
@@ -46,17 +51,13 @@ export default function Backdrop({ scene, accent }: { scene: Scene; accent: stri
     return c;
   }
 
-  /* measure on mount and on resize (repainting everything for the new size) */
+  /* measure when the beanbag's position is known (and again whenever it changes), repainting for the new layout */
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    let t = 0;
-    const update = () => { cache.current.clear(); shown.current = null; setGeo(measure(host)); };
-    const onResize = () => { clearTimeout(t); t = window.setTimeout(update, 180); };
-    t = window.setTimeout(update, 0);
-    window.addEventListener('resize', onResize);
-    return () => { clearTimeout(t); window.removeEventListener('resize', onResize); };
-  }, []);
+    const t = window.setTimeout(() => { cache.current.clear(); shown.current = null; setGeo(measure(host, anchor)); }, 0);
+    return () => clearTimeout(t);
+  }, [anchor]);
 
   /* show the current scene: draw it on the hidden canvas, then crossfade */
   useEffect(() => {

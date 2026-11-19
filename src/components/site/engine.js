@@ -385,7 +385,7 @@ function wallTex() {
     return canvasTex(8, 512, function (g, w, h) { var gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#EDB296'); gr.addColorStop(0.55, '#F3C6B0'); gr.addColorStop(1, '#F7D7C9'); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
   }
 var CAM = {
-    dome:  { pos: [0, 2.0, 6.6], look: [0, 0.62, 0], shadow: 2.4, w: 5.6 },
+    dome:  { pos: [0, 2.0, 6.6], look: [0, 0.62, 0], shadow: 2.7, w: 5.6 },
     mat:   { pos: [0, 5.0, 4.7], look: [0, 0, 0],  shadow: 3.9, w: 8.6 }
   };
 var THUMB_CAM = {
@@ -546,7 +546,7 @@ function initHero(stage, canvas, spec0, theme0) {
       current = model || buildModel(s); holder.add(current); kind = s.kind;
       var f = CAM[kind].shadow; shadowBlob.scale.set(f, f, 1);
       // a real cast shadow on an invisible floor grounds the beanbag (the soft blob stays underneath as contact shadow)
-      var isMat = kind === 'mat'; floor.visible = true; floor.material.opacity = isMat ? 0.55 : 0.4; glow.visible = isMat; shadowBlob.position.y = isMat ? -0.02 : -0.55; shadowBlob.material.opacity = isMat ? 0.45 : 0.55;
+      var isMat = kind === 'mat'; floor.visible = true; floor.material.opacity = isMat ? 0.55 : 0.3; glow.visible = isMat; shadowBlob.position.y = 0.003; shadowBlob.material.opacity = isMat ? 0.45 : 0.62; // contact shadow sits on the floor, right under the beanbag
     }
     function set(s, designChanged, th) {
       selKey = specKey(s);
@@ -639,9 +639,10 @@ function initHero(stage, canvas, spec0, theme0) {
       /* entrance: the beanbag floats up into place when the page opens, its shadow fading in beneath it */
       var ik = reduce ? 1 : Math.min(1, (now - introT0) / 1500), ie = 1 - Math.pow(1 - ik, 3), rise = -2.8 * (1 - ie);
       holder.position.y = bob + rise; clipPlane.constant = -(bob + rise);
-      shadowBlob.material.opacity = 0.55 * ie; floor.material.opacity = 0.4 * ie;
+      // a real shadow tightens and darkens as the beanbag settles, and spreads and fades as it floats up
+      shadowBlob.material.opacity = Math.min(0.72, 0.62 * (1 - bob * 3)) * ie; floor.material.opacity = 0.3 * ie;
       holder.rotation.y = baseRot + userRot + sway + pxs * 0.6 + spinVal;
-      shadowBlob.scale.setScalar(CAM[kind].shadow * (1 - bob * 0.5));
+      shadowBlob.scale.setScalar(CAM[kind].shadow * (1 + bob * 0.9));
 
       camPos.x += (0 - camPos.x) * 0.06; camPos.y += (RING.cy + 1.2 - camPos.y) * 0.06; camPos.z += (frameZ - camPos.z) * 0.06;
       camLook.x += (0 - camLook.x) * 0.06; camLook.y += (RING.cy - camLook.y) * 0.06; camLook.z += (0 - camLook.z) * 0.06;
@@ -697,7 +698,16 @@ function initHero(stage, canvas, spec0, theme0) {
       clearProps(); if (current) disposeGroup(current);
       renderer.dispose(); try { renderer.forceContextLoss(); } catch (e) {}
     }
-    return { set: set, busy: function () { return false; }, onPick: function (fn) { pickCb = fn; }, onHover: function (fn) { hoverCb = fn; }, warm: function (fabric) { warmStyles(renderer, fabric); }, dispose: dispose };
+    /* where the beanbag sits on screen once the camera has settled, in stage pixels: its centre, and the floor line
+       just behind it, so the painted backdrop can put its floor exactly under the beanbag */
+    function anchor() {
+      var w = stage.clientWidth, h = stage.clientHeight, cam = camera.clone();
+      cam.position.set(0, RING.cy + 1.2, frameZ); cam.lookAt(0, RING.cy, 0); cam.updateMatrixWorld();
+      function px(x, y, z) { var v = new T.Vector3(x, y, z).project(cam); return { x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * h }; }
+      var mid = px(0, RING.cy, 0), back = px(0, 0, -1.1), front = px(0, 0, 0.9);
+      return { x: mid.x, mid: mid.y, horizon: back.y, floor: front.y, w: w, h: h };
+    }
+    return { set: set, anchor: anchor, busy: function () { return false; }, onPick: function (fn) { pickCb = fn; }, onHover: function (fn) { hoverCb = fn; }, warm: function (fabric) { warmStyles(renderer, fabric); }, dispose: dispose };
   }
 function makeThumbs(specs, o, done) {
     var W = o.W, H = o.H, zoom = o.zoom || 1, r;
