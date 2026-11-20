@@ -69,7 +69,9 @@ var fabricCache = {}, matCache = {};
 var plainMats = {};
 function plainMat(hex, rough) { var k = hex + rough; return plainMats[k] || (plainMats[k] = new T.MeshStandardMaterial({ color: hex, roughness: rough })); }
 function darkenHex(hex, f) { var c = parseInt(hex.slice(1), 16); function q(v) { v = Math.max(0, Math.min(255, Math.round(v * f))); return ('0' + v.toString(16)).slice(-2); } return '#' + q(c >> 16 & 255) + q(c >> 8 & 255) + q(c & 255); }
-function curInfo(cur) { if (typeof CURRENCIES !== 'undefined' && cur) for (var i = 0; i < CURRENCIES.length; i++) if (CURRENCIES[i].id === cur) return CURRENCIES[i]; return { sym: '$', paper: '#EFEACF', ink: '#3F6E4B' }; }
+/* a money style with no currency named (the design cards, for example) means dollars, everywhere */
+function curId(cur) { return cur || 'USD'; }
+function curInfo(cur) { cur = curId(cur); for (var i = 0; i < CURRENCIES.length; i++) if (CURRENCIES[i].id === cur) return CURRENCIES[i]; return CURRENCIES[0]; }
 /* photos of each currency's note (front, and back where there is one), loaded once before the engine starts */
 var noteImgs = {}, notesPromise = null, notesEarly = false, notesListeners = [];
 function loadNotes() {
@@ -87,7 +89,7 @@ function loadNotes() {
   });
   return notesPromise;
 }
-function noteImg(cur, i) { var l = noteImgs[cur]; return l && l.length ? l[(i || 0) % l.length] : null; }
+function noteImg(cur, i) { var l = noteImgs[curId(cur)]; return l && l.length ? l[(i || 0) % l.length] : null; }
 function noteAspect(cur) { var im = noteImg(cur, 0); return im ? im.naturalWidth / im.naturalHeight : 1 / 0.43; }
 function drawBill(g, x, y, w, h, cur, i) {
     var CI = curInfo(cur);
@@ -194,6 +196,7 @@ function capGeometry(R, angle) {
 function shadowify(m) { m.castShadow = true; m.receiveShadow = true; return m; }
 var clipPlane = new T.Plane(new T.Vector3(0, 1, 0), 0), clipCache = {};
 function dollarMat(fabric, cur) {
+    cur = curId(cur);
     var cord = fabric === 'corduroy', CI = curInfo(cur);
     var map = canvasTex(2048, 1024, function (g, w, h) {
       scatterBills(g, w, h, darkenHex(CI.paper, 0.62), function (g2, x, y, bw, bh, i) { drawBill(g2, x, y, bw, bh, cur, i); });
