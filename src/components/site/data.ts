@@ -117,17 +117,17 @@ export function themeOf(s: Selection): Theme {
 }
 
 /* ---------- the world behind each beanbag ---------- */
-export type Scene = 'favela' | 'cr7' | 'sol' | 'poolhall' | 'vault';
+export type Scene = 'rio' | 'cr7' | 'sol' | 'poolhall' | 'vault';
 /* which painted scene sits behind the current style, and the accent colour it picks up */
 export function sceneOf(s: Selection): { scene: Scene; accent: string } {
   const d = byId(DESIGNS, s.id);
-  if (d.variant === 'player') return { scene: s.player === 'neymar' ? 'favela' : s.player === 'ronaldo' ? 'cr7' : 'sol', accent: playerOf(s).hex };
+  if (d.variant === 'player') return { scene: s.player === 'neymar' ? 'rio' : s.player === 'ronaldo' ? 'cr7' : 'sol', accent: playerOf(s).hex };
   if (d.variant === 'ball') return { scene: 'poolhall', accent: ballOf(s).hex };
   return { scene: 'vault', accent: curOf(s).theme };
 }
 /* page colours (order section, fallbacks) that match each scene */
 const SCENE_THEMES: Record<Scene, Theme> = {
-  favela: ['#e8843f', '#5e2a24', '#140a0c'],
+  rio: ['#e8843f', '#4a2f5e', '#120c18'],
   cr7: ['#6f521b', '#241a08', '#060607'],
   sol: ['#5b95c8', '#1c4672', '#091523'],
   poolhall: ['#1f7a4a', '#0c3622', '#04110a'],

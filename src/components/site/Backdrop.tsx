@@ -5,7 +5,7 @@ import type { Scene } from './data';
 import { drawSun, paintScene, type Geo } from './backdrops';
 import type { Anchor } from './Stage';
 
-const SCENES: Scene[] = ['poolhall', 'favela', 'cr7', 'sol', 'vault'];
+const SCENES: Scene[] = ['poolhall', 'rio', 'cr7', 'sol', 'vault'];
 
 /* Where the beanbag sits for this screen. With the 3D engine running, its own measurement (`anchor`) is used, so the
    painted floor line lands just behind the beanbag; before that (or without 3D) an estimate of the same framing. */
@@ -14,7 +14,7 @@ function measure(host: HTMLElement, anchor: Anchor | null): Geo {
   const stage = host.parentElement?.querySelector('#stage') as HTMLElement | null;
   if (anchor && stage) {
     const left = stage.offsetLeft, top = stage.offsetTop;
-    return { w, h, cx: left + anchor.x, cy: top + anchor.mid, hz: top + anchor.horizon };
+    return { w, h, cx: left + anchor.x, cy: top + anchor.mid, hz: top + anchor.horizon, top };
   }
   if (window.innerWidth >= 1100 && window.innerWidth / window.innerHeight > 1.2) {
     const cy = h * 0.545;
@@ -22,7 +22,16 @@ function measure(host: HTMLElement, anchor: Anchor | null): Geo {
   }
   const top = stage ? stage.offsetTop : h * 0.1, sh = stage ? stage.offsetHeight : h * 0.6;
   const cy = top + sh * 0.51;
-  return { w, h, cx: w / 2, cy, hz: cy + sh * 0.15 };
+  return { w, h, cx: w / 2, cy, hz: cy + sh * 0.15, top };
+}
+
+/* the Argentine sun: big behind the beanbag on wide screens; on phones and tablets it fits the gap between the
+   slogan and the top of the beanbag, so it is clearly visible and never sits behind the words */
+function sunBox(g: Geo) {
+  if (!g.top) return { size: Math.round(Math.min(g.h * 0.62, g.w * 0.5)), x: g.cx, y: g.cy - g.h * 0.13 };
+  const bagTop = g.cy - (g.hz - g.cy) * 2.1, avail = Math.max(70, bagTop - g.top);
+  const size = Math.round(Math.min(g.w * 0.8, avail * 1.3));
+  return { size, x: g.cx, y: g.top + size / 2 };
 }
 
 /*
@@ -87,12 +96,12 @@ export default function Backdrop({ scene, accent, anchor }: { scene: Scene; acce
   useEffect(() => {
     const c = sunRef.current;
     if (!c || !geo) return;
-    const size = Math.round(Math.min(geo.h * 0.62, geo.w * 0.5));
+    const size = sunBox(geo).size;
     c.width = c.height = size;
     drawSun(c.getContext('2d')!, size);
   }, [geo]);
 
-  const sunSize = geo ? Math.round(Math.min(geo.h * 0.62, geo.w * 0.5)) : 0;
+  const sun = geo ? sunBox(geo) : null, sunSize = sun ? sun.size : 0;
   const tinted = scene === 'poolhall' || scene === 'vault';
   return (
     <div className={'backdrop scene-' + scene} ref={hostRef} aria-hidden="true">
@@ -103,7 +112,7 @@ export default function Backdrop({ scene, accent, anchor }: { scene: Scene; acce
         <canvas
           ref={sunRef}
           className="bd-sun"
-          style={{ left: geo.cx - sunSize / 2, top: geo.cy - geo.h * 0.13 - sunSize / 2, width: sunSize, height: sunSize, opacity: scene === 'sol' ? 1 : 0 }}
+          style={{ left: sun!.x - sunSize / 2, top: sun!.y - sunSize / 2, width: sunSize, height: sunSize, opacity: scene === 'sol' ? 1 : 0 }}
         />
       )}
       <div

@@ -553,13 +553,16 @@ function initHero(stage, canvas, spec0, theme0) {
     function pickKey(p) { return !p ? '' : p.player ? 'player:' + p.player : p.ball ? 'ball:' + p.ball : 'cur:' + p.cur; }
     function specKey(s) { return s.kit ? 'player:' + s.kit.id : s.patch === 'circle' ? 'ball:' + (s.num || 8) : s.patch === 'dollar' ? 'cur:' + (s.cur || 'USD') : ''; }
     var propsKey = '';
+    /* where each style floats: never straight above the beanbag (that is where CR7, the statue and the sun are).
+       nor in front of it (where its badge is). Three styles: left, upper right and lower right, around its sides. */
+    function ringAngle(i, n) { var D = Math.PI / 180; return n === 3 ? [170 * D, 35 * D, -30 * D][i] : -Math.PI * 0.5 + (i + 0.5) / n * Math.PI * 2; }
     function buildProps(id, first) {
       clearProps();
       var d = byId(DESIGNS, id), list = PROPSETS[d.props] || PROPSETS.players, n = list.length;
       propsKey = d.props; bornAt = performance.now();
       for (var i = 0; i < n; i++) {
         var g = makeProp(list[i]); g.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3)); g.scale.setScalar(0.001); propsG.add(g);
-        props.push({ g: g, a: -Math.PI * 0.5 + (i + 0.5) / n * Math.PI * 2, s: g.userData.base * (n <= 3 ? 1.2 : 0.9), cs: 0, delay: (first ? 700 : 0) + i * 70, spin: rand(0.25, 0.6), ph: rand(0, 6.28), key: pickKey(g.userData.pick) });
+        props.push({ g: g, a: ringAngle(i, n), s: g.userData.base * (n <= 3 ? 1.2 : 0.9), cs: 0, delay: (first ? 700 : 0) + i * 70, spin: rand(0.25, 0.6), ph: rand(0, 6.28), key: pickKey(g.userData.pick) });
       }
     }
     /* fit the ring on screen: beside the text on wide screens, centred on tablets and phones */
@@ -579,7 +582,7 @@ function initHero(stage, canvas, spec0, theme0) {
       var isMat = kind === 'mat'; floor.visible = isMat; floor.material.opacity = 0.55; glow.visible = isMat; shadowBlob.position.y = 0.003; shadowBlob.material.opacity = isMat ? 0.45 : 0.8; // on the hero only one soft shadow, centred under the beanbag (no hard cast shadow off to the side)
     }
     /* sitting: the seat sinks in with a little give (sinks slightly past, then settles), and rises back up when you stand */
-    var settle = 0, settleTo = 0, lastSpec = spec0;
+    var settle = 0, settleTo = 0, lastSpec = spec0, sitClock = 3.2; // first sit comes soon after the beanbag lands
     /* the banknote photos arrived after the beanbag was built: rebuild whatever shows money */
     function onNotes() {
       if (disposed) return;
@@ -677,23 +680,23 @@ function initHero(stage, canvas, spec0, theme0) {
 
       if (!drag.on) { userRot += vel; vel *= 0.94; }
       pxs += (mx - pxs) * 0.05; pys += (my - pys) * 0.05;
+      /* every 5 seconds someone sits down in it, then gets up again (not with reduced motion, and not until it has floated in) */
+      if (!reduce && now - introT0 > 1800) { sitClock += dt; if (sitClock >= 5) { sitClock = 0; settleTo = settleTo > 0 ? 0 : 1; } }
       if (settle !== settleTo) { var ds = settleTo - settle, st = reduce ? 1 : dt / (settleTo > 0 ? 0.75 : 0.6); settle = Math.abs(ds) <= st ? settleTo : settle + (ds > 0 ? st : -st); sitShape(); }
-      var seated = Math.min(1, settle * 1.5); // someone in it: it stops floating and turns its seat to you
-      var bob = (reduce || kind === 'mat') ? 0 : Math.sin(t * 1.05) * 0.08 * (1 - seated), sway = reduce ? 0 : Math.sin(t * 0.5) * 0.3 * (1 - seated);
-      if (settleTo > 0 && !drag.on) { var TAU = Math.PI * 2, face = Math.round((baseRot + userRot) / TAU) * TAU - baseRot; userRot += (face - userRot) * Math.min(1, dt * 4); vel *= 0.8; }
+      var seated = Math.min(1, settle * 1.5); // how far someone is sitting in it (the beanbag keeps floating and turning either way)
+      var bob = (reduce || kind === 'mat') ? 0 : Math.sin(t * 1.05) * 0.08, sway = reduce ? 0 : Math.sin(t * 0.5) * 0.3;
       /* entrance: the beanbag floats up into place when the page opens, its shadow fading in beneath it */
       var ik = reduce ? 1 : Math.min(1, (now - introT0) / 1500), ie = 1 - Math.pow(1 - ik, 3), rise = -2.8 * (1 - ie);
       holder.position.y = bob + rise; clipPlane.constant = -(bob + rise);
       // a real shadow tightens and darkens as the beanbag settles, and spreads and fades as it floats up
       shadowBlob.material.opacity = 0.8 * (1 - bob * 2) * ie; 
-      holder.rotation.y = baseRot + userRot + sway + pxs * 0.6 * (1 - seated) + spinVal;
+      holder.rotation.y = baseRot + userRot + sway + pxs * 0.6 + spinVal;
       shadowBlob.scale.set(CAM[kind].shadow * 1.15 * (1 + bob * 0.6), CAM[kind].shadow * 0.95 * (1 + bob * 0.6), 1);
 
-      camPos.x += (0 - camPos.x) * 0.06; camPos.y += (RING.cy + 1.2 + seated * 0.7 - camPos.y) * 0.06; camPos.z += (frameZ - camPos.z) * 0.06;
+      camPos.x += (0 - camPos.x) * 0.06; camPos.y += (RING.cy + 1.2 + seated * 0.25 - camPos.y) * 0.03; camPos.z += (frameZ - camPos.z) * 0.06;
       camLook.x += (0 - camLook.x) * 0.06; camLook.y += (RING.cy - camLook.y) * 0.06; camLook.z += (0 - camLook.z) * 0.06;
       camera.position.set(camPos.x + pxs * 0.35, camPos.y - pys * 0.18, camPos.z); camera.lookAt(camLook);
 
-      if (!reduce && canHover && !hoverKey) ringA += dt * 0.03; // drift only with a mouse (it pauses under the cursor); touch screens keep the ring still so taps land
       for (var i = 0; i < props.length; i++) {
         var p = props[i], a = p.a + ringA, sel = p.key === selKey, hov = p.key === hoverKey;
         var pk = reduce ? 1 : Math.min(1, Math.max(0, (now - bornAt - p.delay) / 800)), pe = 1 - Math.pow(1 - pk, 3); // each style floats up as it appears

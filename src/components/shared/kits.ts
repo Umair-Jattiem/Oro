@@ -16,7 +16,7 @@ export type Kit = {
 export const KITS: Kit[] = [
   { id: 'messi',   name: 'Messi',   num: 10, team: 'Argentina', hex: '#75AADB', hex2: '#F7F7F2', ink: '#14213D', pattern: 'stripes', theme: '#3E78B2' },
   { id: 'ronaldo', name: 'Ronaldo', num: 7,  team: 'Portugal',  hex: '#B5121B', hex2: '#0B6B3A', ink: '#E9C46A', theme: '#9E1A22' },
-  { id: 'neymar',  name: 'Neymar',  num: 10, team: 'Brazil',    hex: '#F6D21F', hex2: '#119A46', ink: '#13357E', theme: '#16884A' },
+  { id: 'neymar',  name: 'Neymar Jr', num: 10, team: 'Brazil',    hex: '#F6D21F', hex2: '#119A46', ink: '#13357E', theme: '#16884A' },
   { id: 'pogba',   name: 'Pogba',   num: 6,  team: 'France',    hex: '#1C2752', hex2: '#C8102E', ink: '#F4F4F2', theme: '#25356E' },
   { id: 'modric',  name: 'Modric',  num: 10, team: 'Croatia',   hex: '#D0102F', hex2: '#F5F5F2', ink: '#12215E', pattern: 'checks', theme: '#B3172F' },
   { id: 'salah',   name: 'Salah',   num: 11, team: 'Egypt',     hex: '#C0161D', hex2: '#111111', ink: '#F4F4F2', theme: '#A1171D' },

@@ -8,7 +8,6 @@ import {
 import Stage, { type Anchor, type Engine, type Hero } from './Stage';
 import OrderSection, { lineKey, MAX_EACH, type Line } from './OrderSection';
 import { FabricPills } from './controls';
-import K4Viewer, { type K4Request } from '../shared/K4Viewer';
 import SmoothScroll, { scrollToId } from '../motion/SmoothScroll';
 import { useSiteMotion } from './useSiteMotion';
 import ScrollVelocity from '../react-bits/ScrollVelocity';
@@ -26,12 +25,10 @@ const isCurrent = (p: Pick, s: Selection) =>
  */
 export default function SiteApp() {
   const [sel, setSel] = useState<Selection>(INITIAL_SELECTION);
-  const [k4, setK4] = useState<K4Request | null>(null);
   const [engine, setEngine] = useState<Engine | null>(null);
   const [shot, setShot] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [anchor, setAnchor] = useState<Anchor | null>(null);
-  const [sitting, setSitting] = useState(false);
   const [basket, setBasket] = useState<Line[]>([]); // every style the visitor wants, with how many of each
   const [added, setAdded] = useState<string | null>(null); // short confirmation after adding a style
   const addedTimer = useRef(0);
@@ -79,12 +76,31 @@ export default function SiteApp() {
     el.style.transform = `translate(${Math.round(x + 16)}px, ${Math.round(y - 12)}px)`;
   }, []);
   const onHero = useCallback((h: Hero | null) => { heroRef.current = h; setAnchor(h ? h.anchor() : null); }, []);
-  /* the painted floor follows where the 3D beanbag actually sits, so re-measure when the window changes size */
+  /* phones and tablets: size the beanbag's area so the logo, the beanbag and its controls down to Add to order all fit
+     on the screen the page opens on. Re-fitted when the width changes (turning the device), not when the browser's
+     toolbar slides in and out while scrolling, so the beanbag never jumps. Then the painted floor is re-measured. */
   useEffect(() => {
-    let t = 0;
-    const onResize = () => { clearTimeout(t); t = window.setTimeout(() => { const h = heroRef.current; if (h) setAnchor(h.anchor()); }, 300); };
+    let t = 0, lastW = 0;
+    const fit = () => {
+      const stage = document.getElementById('stage'), add = document.querySelector('.hero-left .btnrow');
+      if (!stage || !add) return;
+      if (window.innerWidth > 1200) { stage.style.height = ''; stage.style.minHeight = ''; return; }
+      const bottom = add.getBoundingClientRect().bottom + window.scrollY, cur = stage.offsetHeight;
+      const target = Math.round(Math.max(230, Math.min(640, cur - (bottom + 14 - window.innerHeight))));
+      if (Math.abs(target - cur) > 2) { stage.style.minHeight = '0'; stage.style.height = target + 'px'; }
+    };
+    const remeasure = () => { const h = heroRef.current; if (h) setAnchor(h.anchor()); };
+    const run = (force: boolean) => {
+      if (!force && window.innerWidth === lastW) { remeasure(); return; }
+      lastW = window.innerWidth; fit(); fit(); // twice: the first pass can move things the second one corrects
+      clearTimeout(t); t = window.setTimeout(remeasure, 160);
+    };
+    run(true);
+    document.fonts?.ready.then(() => run(true));
+    let rt = 0;
+    const onResize = () => { clearTimeout(rt); rt = window.setTimeout(() => run(false), 250); };
     window.addEventListener('resize', onResize);
-    return () => { clearTimeout(t); window.removeEventListener('resize', onResize); };
+    return () => { clearTimeout(t); clearTimeout(rt); window.removeEventListener('resize', onResize); };
   }, []);
   /* once the 3D engine is ready: remember it, and render a small 3D thumbnail for each design card */
   const onEngine = useCallback((e: Engine | null) => {
@@ -119,10 +135,6 @@ export default function SiteApp() {
   const count = basket.reduce((n, l) => n + l.qty, 0);
   useEffect(() => () => clearTimeout(addedTimer.current), []);
 
-  function open4K() {
-    if (!engine) return;
-    setK4({ spec: specOf(selRef.current), label: designName(selRef.current), render: engine.renderStudio as K4Request['render'] });
-  }
   const go = (id: string) => (e: React.MouseEvent) => { e.preventDefault(); scrollToId(id); };
 
   const d = byId(DESIGNS, sel.id);
@@ -139,12 +151,12 @@ export default function SiteApp() {
         <section className="hero2" id="home">
           <Backdrop {...sceneOf(sel)} anchor={anchor} />
           <Particles kind={d.variant === 'cur' ? 'notes' : 'dust'} color={curOf(sel).paper} imgs={curOf(sel).img} />
-          <Stage hint={d.variant === 'player' ? 'Tap a ball to change player · drag to spin' : d.variant === 'ball' ? 'Tap a ball to change colour · drag to spin' : 'Tap a note to change currency · drag to spin'} getInitial={getInitial} onHero={onHero} onPick={choose} onEngine={onEngine} onHover={onHover} />
+          <Stage hint={d.variant === 'player' ? 'Tap a ball to change player' : d.variant === 'ball' ? 'Tap a ball to change colour' : 'Tap a note to change currency'} getInitial={getInitial} onHero={onHero} onPick={choose} onEngine={onEngine} onHover={onHover} />
           <div className="ring-tip" ref={tipRef} hidden aria-hidden="true" />
           <div className="hero-in">
             <div className="hero-left">
               <OroMark icon={shot} className="oro-hero" />
-              <h1 className="title"><span className="o">Sit</span><br />Different</h1>
+              <h1 className="title"><span className="o">Sit</span> <br />Different</h1>
               <p className="desc">Oversized beanbags for rooms with a point of view. Tap any ball or note around the beanbag to restyle it, then order it below.</p>
               <div className="ctl" aria-label="Your beanbag">
                 <div className="now">
@@ -174,8 +186,6 @@ export default function SiteApp() {
                   <Magnet padding={70} magnetStrength={4} maxOffset={12}>
                     <button type="button" className="primary-btn" onClick={addToOrder}>Add to order<span className="plus" aria-hidden="true">+</span></button>
                   </Magnet>
-                  <button type="button" className="ghost-btn" aria-pressed={sitting} onClick={() => { if (heroRef.current) setSitting(heroRef.current.toggleSit()); }}>{sitting ? 'Stand up' : 'Sit on it'}</button>
-                  <button type="button" className="ghost-btn" onClick={open4K}>View in 4K</button>
                 </div>
                 <p className="fine">Live 3D concept, not a photograph of a finished product. Price, fabric and sizes to be confirmed.</p>
               </div>
@@ -203,7 +213,6 @@ export default function SiteApp() {
         <OrderSection sel={sel} shot={shot} basket={basket} onAdd={addToOrder} onQty={setLineQty} onRemove={removeLine} onClear={() => setBasket([])} />
       </main>
 
-      <K4Viewer request={k4} onClose={() => setK4(null)} />
       <div className="added-toast" role="status" aria-live="polite" data-show={added ? '' : undefined}>
         {added && <>Added {added} · {count} {count === 1 ? 'beanbag' : 'beanbags'} in your order <a href="#order" onClick={go('order')}>View order</a></>}
       </div>

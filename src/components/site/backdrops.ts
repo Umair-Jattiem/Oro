@@ -3,7 +3,8 @@
 import type { Scene } from './data';
 
 type G = CanvasRenderingContext2D;
-type Geo = { w: number; h: number; cx: number; cy: number; hz: number };
+/* top: on phones and tablets the logo and slogan sit above the beanbag; the scene starts below them (0 = full height) */
+type Geo = { w: number; h: number; cx: number; cy: number; hz: number; top?: number };
 
 function seeded(seed: number) {
   let s = seed;
@@ -35,63 +36,71 @@ function pitch(g: G, { w, h, cx, hz }: Geo, a: string, b: string, lines: string)
   g.beginPath(); g.arc(cx, fy, h * 0.006, 0, 7); g.fillStyle = lines; g.fill();
 }
 
-/* ---------- Neymar: a favela street court at sunset ---------- */
-function favela(g: G, geo: Geo) {
-  const { w, h, cx, hz } = geo, k = h / 900, rnd = seeded(11);
-  g.fillStyle = vgrad(g, 0, hz, [[0, '#1b2b5a'], [0.38, '#6a4778'], [0.72, '#e6834a'], [1, '#ffd07c']]); g.fillRect(0, 0, w, hz);
-  glow(g, w * 0.18, hz * 0.7, h * 0.5, 'rgba(255,214,140,A)', 0.55);
-  // far hills
-  g.fillStyle = '#3d3452'; g.beginPath(); g.moveTo(0, hz * 0.5);
-  for (let x = 0; x <= w; x += w / 12) g.lineTo(x, hz * (0.42 + 0.08 * Math.sin(x / w * 5 + 1)));
-  g.lineTo(w, hz); g.lineTo(0, hz); g.fill();
-  // hillside covered in colourful houses, smaller and hazier towards the top
-  const palette = ['#e94f37', '#f6c90e', '#3bb273', '#2e86ab', '#f18f01', '#c5d86d', '#f7a1c4', '#8ecae6', '#ffb4a2', '#e9edc9'];
-  for (let r = 0; r < 11; r++) {
-    const rowY = hz * 0.36 + r * hz * 0.062, scale = (0.55 + r * 0.06) * k;
-    let x = -rnd() * 40 * k;
-    while (x < w) {
-      const hw = (34 + rnd() * 50) * scale * 1.4, hh = (26 + rnd() * 30) * scale * 1.3;
-      const top = hz * (0.33 + 0.1 * Math.sin(x / w * 3.2 + 0.6));
-      if (rowY > top) {
-        g.fillStyle = palette[Math.floor(rnd() * palette.length)];
-        g.fillRect(x, rowY - hh, hw, hh + 4 * k);
-        g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x, rowY - hh, hw, 3 * k);
-        for (let wv = 0; wv < 3; wv++) if (rnd() < 0.55) {
-          g.fillStyle = rnd() < 0.45 ? '#ffe39a' : 'rgba(20,20,30,0.55)';
-          g.fillRect(x + hw * (0.15 + wv * 0.28), rowY - hh * 0.65, hw * 0.14, hh * 0.3);
-        }
-      }
-      x += hw + rnd() * 6 * k;
-    }
+/* ---------- Neymar Jr: Rio at sunset, Christ the Redeemer on Corcovado above the beanbag ---------- */
+function rio(g: G, geo: Geo) {
+  const { w, h, cx, cy, hz } = geo, k = h / 900, rnd = seeded(11);
+  // dusk sky
+  g.fillStyle = vgrad(g, 0, hz, [[0, '#14244f'], [0.4, '#5b3f78'], [0.75, '#e07a4f'], [1, '#ffc977']]); g.fillRect(0, 0, w, hz);
+  for (let i = 0; i < 70; i++) { g.fillStyle = `rgba(255,255,255,${0.2 + rnd() * 0.5})`; g.fillRect(rnd() * w, rnd() * hz * 0.35, 1.5 * k, 1.5 * k); }
+  // where the statue stands: centred over the beanbag, its feet just above the beanbag's top
+  const bagTop = cy - (hz - cy) * 2.1;
+  const S = Math.max(80 * k, Math.min(h * 0.3, w * 0.42, bagTop * 0.82)); // statue height
+  const peakY = bagTop - S * 0.02, sx = cx;
+  glow(g, sx, peakY - S * 0.5, S * 1.6, 'rgba(255,214,150,A)', 0.55);
+  // Sugarloaf and the far hills, hazy blue-purple
+  g.fillStyle = '#4a3e6b';
+  g.beginPath(); g.moveTo(0, hz);
+  g.lineTo(0, hz * 0.78); g.quadraticCurveTo(w * 0.06, hz * 0.52, w * 0.12, hz * 0.6); g.quadraticCurveTo(w * 0.16, hz * 0.7, w * 0.2, hz * 0.8);
+  g.quadraticCurveTo(w * 0.24, hz * 0.66, w * 0.28, hz * 0.82); g.lineTo(w * 0.3, hz); g.fill();
+  g.beginPath(); g.moveTo(w * 0.62, hz); g.quadraticCurveTo(w * 0.8, hz * 0.64, w, hz * 0.7); g.lineTo(w, hz); g.fill();
+  // Corcovado: a steep green-black peak rising behind the beanbag to the statue's pedestal
+  const mtn = g.createLinearGradient(0, peakY, 0, hz);
+  mtn.addColorStop(0, '#2c2a45'); mtn.addColorStop(1, '#1b2a2a');
+  g.fillStyle = mtn; g.beginPath();
+  g.moveTo(sx - w * 0.75, hz);
+  g.bezierCurveTo(sx - w * 0.35, hz * 0.95, sx - S * 0.55, peakY + S * 0.35, sx - S * 0.12, peakY + S * 0.02);
+  g.lineTo(sx + S * 0.12, peakY + S * 0.02);
+  g.bezierCurveTo(sx + S * 0.6, peakY + S * 0.4, sx + w * 0.3, hz * 0.92, sx + w * 0.75, hz);
+  g.closePath(); g.fill();
+  // a warm rim of sunset light down the left edge of the peak
+  g.save(); g.clip(); g.fillStyle = vgrad(g, peakY, hz, [[0, 'rgba(255,170,110,0.35)'], [1, 'rgba(255,170,110,0)']]);
+  g.fillRect(sx - w * 0.75, peakY, w * 0.75 + S * 0.05, hz - peakY); g.restore();
+  // city lights along the bay
+  for (let i = 0; i < 260; i++) {
+    const x = rnd() * w, y = hz - rnd() * hz * 0.07;
+    g.fillStyle = rnd() < 0.7 ? `rgba(255,220,150,${0.35 + rnd() * 0.5})` : `rgba(255,255,255,${0.3 + rnd() * 0.4})`;
+    g.fillRect(x, y, 2 * k, 2 * k);
   }
-  g.fillStyle = vgrad(g, hz * 0.25, hz, [[0, 'rgba(255,170,110,0.4)'], [1, 'rgba(255,170,110,0)']]); g.fillRect(0, hz * 0.25, w, hz * 0.75);
-  // chain-link fence along the back of the court
-  const fy = hz - h * 0.13;
-  g.strokeStyle = 'rgba(30,40,40,0.55)'; g.lineWidth = 1;
-  for (let x = -h; x < w + h; x += 14 * k) {
-    g.beginPath(); g.moveTo(x, fy); g.lineTo(x + h * 0.13, hz); g.stroke();
-    g.beginPath(); g.moveTo(x, hz); g.lineTo(x + h * 0.13, fy); g.stroke();
-  }
-  g.fillStyle = '#26302e'; for (let x = 0; x < w; x += 160 * k) g.fillRect(x, fy - 6 * k, 5 * k, h * 0.13 + 6 * k);
-  g.fillRect(0, fy - 6 * k, w, 4 * k);
-  // painted court
-  g.fillStyle = vgrad(g, hz, h, [[0, '#2f7a5c'], [1, '#174233']]); g.fillRect(0, hz, w, h - hz);
-  for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(0,0,0,${0.04 + rnd() * 0.08})`; g.fillRect(rnd() * w, hz + rnd() * (h - hz), 2 + rnd() * 6, 1 + rnd() * 2); }
-  g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = Math.max(2, h * 0.004);
-  const cyF = hz + (h - hz) * 0.22;
-  g.beginPath(); g.ellipse(cx, cyF, w * 0.16, (h - hz) * 0.1, 0, 0, 7); g.stroke();
-  g.beginPath(); g.moveTo(0, cyF); g.lineTo(w, cyF); g.stroke();
+  // the statue: pale stone, arms open wide (head, outstretched arms with hanging sleeves, robe, plinth)
+  const u = S / 10, top = peakY - S;
+  g.save();
+  g.shadowColor = 'rgba(255,230,190,0.75)'; g.shadowBlur = u * 2.2;
+  const stone = g.createLinearGradient(sx - u * 4, 0, sx + u * 4, 0);
+  stone.addColorStop(0, '#fff3dc'); stone.addColorStop(0.55, '#e8dccb'); stone.addColorStop(1, '#a99f97');
+  g.fillStyle = stone;
+  g.fillRect(sx - u * 0.75, peakY - u * 1.0, u * 1.5, u * 1.0);                  // plinth
+  g.beginPath();                                                                 // robe, widening a little to the feet
+  g.moveTo(sx - u * 0.55, top + u * 2.0); g.lineTo(sx + u * 0.55, top + u * 2.0);
+  g.lineTo(sx + u * 0.75, peakY - u * 1.0); g.lineTo(sx - u * 0.75, peakY - u * 1.0); g.closePath(); g.fill();
+  g.beginPath();                                                                 // arms and sleeves
+  g.moveTo(sx - u * 4.6, top + u * 1.95); g.lineTo(sx + u * 4.6, top + u * 1.95);
+  g.lineTo(sx + u * 4.6, top + u * 2.35); g.lineTo(sx + u * 3.4, top + u * 2.45);
+  g.quadraticCurveTo(sx + u * 1.6, top + u * 3.3, sx + u * 0.6, top + u * 3.6);
+  g.lineTo(sx - u * 0.6, top + u * 3.6);
+  g.quadraticCurveTo(sx - u * 1.6, top + u * 3.3, sx - u * 3.4, top + u * 2.45);
+  g.lineTo(sx - u * 4.6, top + u * 2.35); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(sx - u * 0.75, top + u * 1.6); g.lineTo(sx + u * 0.75, top + u * 1.6); // shoulders
+  g.lineTo(sx + u * 0.9, top + u * 2.1); g.lineTo(sx - u * 0.9, top + u * 2.1); g.closePath(); g.fill();
+  g.beginPath(); g.arc(sx, top + u * 1.05, u * 0.55, 0, 7); g.fill();            // head
+  g.restore();
+  // a few fold lines in the robe
+  g.strokeStyle = 'rgba(120,105,95,0.35)'; g.lineWidth = Math.max(1, u * 0.06);
+  [-0.25, 0.05, 0.3].forEach((f) => { g.beginPath(); g.moveTo(sx + u * f, top + u * 3.8); g.lineTo(sx + u * f * 1.3, peakY - u * 1.1); g.stroke(); });
+  // pitch in Brazil green with a yellow line at the back
+  pitch(g, geo, '#1f6e45', '#247a4d', 'rgba(255,255,255,0.75)');
   g.fillStyle = '#ffdf00'; g.globalAlpha = 0.85; g.fillRect(0, hz, w, 3 * k); g.globalAlpha = 1;
-  // bunting in Brazil's colours
-  const flags = ['#009C3B', '#FFDF00', '#002776'];
-  for (let line = 0; line < 2; line++) {
-    const y0 = h * (0.06 + line * 0.07), sag = h * 0.05;
-    for (let i = 0; i < 26; i++) {
-      const t = i / 25, x = w * t, y = y0 + Math.sin(t * Math.PI) * sag;
-      g.fillStyle = flags[(i + line) % 3]; g.beginPath(); g.moveTo(x - 12 * k, y); g.lineTo(x + 12 * k, y); g.lineTo(x, y + 26 * k); g.fill();
-    }
-  }
-  vignette(g, geo, 0.45);
+  g.fillStyle = vgrad(g, hz, hz + h * 0.05, [[0, 'rgba(255,190,120,0.25)'], [1, 'rgba(255,190,120,0)']]); g.fillRect(0, hz, w, h * 0.05);
+  vignette(g, geo, 0.4);
 }
 
 /* ---------- Ronaldo: CR7 under the stadium floodlights ---------- */
@@ -117,11 +126,12 @@ function cr7(g: G, geo: Geo) {
     g.fillStyle = '#fffaf0';
     for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) g.fillRect(x - 40 * k + c * 17 * k, y - 12 * k + r * 10 * k, 13 * k, 7 * k);
   });
-  // giant gold CR7 behind the beanbag
-  const size = Math.min(h * 0.38, w * 0.2);
+  // giant gold CR7 above the beanbag (kept clear of its top, so it reads on phones too)
+  const bagTop = cy - (hz - cy) * 2.1;
+  const size = Math.max(54 * k, Math.min(h * 0.24, w * 0.24, bagTop * 0.75));
   g.save(); g.font = `900 ${size}px Manrope, "Arial Black", Arial, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
   if ('letterSpacing' in g) (g as G & { letterSpacing: string }).letterSpacing = `${Math.round(size * 0.04)}px`;
-  const ty = cy - size * 0.3;
+  const ty = Math.max(size * 0.55 + h * 0.03, bagTop - size * 0.55);
   const gold = g.createLinearGradient(0, ty - size / 2, 0, ty + size / 2);
   gold.addColorStop(0, '#fff0b5'); gold.addColorStop(0.45, '#d9a640'); gold.addColorStop(1, '#7c5812');
   g.shadowColor = 'rgba(255,196,80,0.6)'; g.shadowBlur = size * 0.25; g.fillStyle = gold; g.globalAlpha = 0.92;
@@ -257,6 +267,22 @@ function vault(g: G, geo: Geo) {
   vignette(g, geo, 0.6);
 }
 
-const PAINTERS: Record<Scene, (g: G, geo: Geo) => void> = { favela, cr7, sol, poolhall, vault };
-export function paintScene(g: G, scene: Scene, geo: Geo) { PAINTERS[scene](g, geo); }
+const PAINTERS: Record<Scene, (g: G, geo: Geo) => void> = { rio, cr7, sol, poolhall, vault };
+export function paintScene(g: G, scene: Scene, geo: Geo) {
+  const top = Math.round(geo.top || 0);
+  if (top <= 0) { PAINTERS[scene](g, geo); return; }
+  // the scene fills the beanbag's area only, so CR7, the statue and the rest never sit behind the logo and slogan
+  g.save(); g.translate(0, top);
+  PAINTERS[scene](g, { w: geo.w, h: geo.h - top, cx: geo.cx, cy: geo.cy - top, hz: geo.hz - top });
+  g.restore();
+  // above it: the scene's own sky colour, plain and darkening upwards, blended into the scene
+  const row = g.getImageData(0, top + 2, Math.max(1, Math.round(geo.w)), 1).data;
+  let r = 0, gg = 0, b = 0; const n = row.length / 4;
+  for (let i = 0; i < row.length; i += 4) { r += row[i]; gg += row[i + 1]; b += row[i + 2]; }
+  r = Math.round(r / n); gg = Math.round(gg / n); b = Math.round(b / n);
+  // kept a little darker than the sky so the white logo and slogan stay easy to read, even over Messi's pale blue
+  const tone = (f: number, a = 1) => `rgba(${Math.round(r * f)},${Math.round(gg * f)},${Math.round(b * f)},${a})`;
+  g.fillStyle = vgrad(g, 0, top, [[0, tone(0.3)], [1, tone(0.62)]]); g.fillRect(0, 0, geo.w, top);
+  g.fillStyle = vgrad(g, top, top + 44, [[0, tone(0.62)], [1, tone(0.62, 0)]]); g.fillRect(0, top, geo.w, 44);
+}
 export type { Geo };
