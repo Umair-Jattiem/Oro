@@ -76,23 +76,35 @@ export default function SiteApp() {
     el.style.transform = `translate(${Math.round(x + 16)}px, ${Math.round(y - 12)}px)`;
   }, []);
   const onHero = useCallback((h: Hero | null) => { heroRef.current = h; setAnchor(h ? h.anchor() : null); }, []);
-  /* phones and tablets: size the beanbag's area so the logo, the beanbag and its controls down to Add to order all fit
-     on the screen the page opens on. Re-fitted when the width changes (turning the device), not when the browser's
-     toolbar slides in and out while scrolling, so the beanbag never jumps. Then the painted floor is re-measured. */
+  /* only the corner Oro button follows you down the page; Order now stays up at the top */
   useEffect(() => {
-    let t = 0, lastW = 0;
+    const root = document.documentElement;
+    const onScroll = () => root.classList.toggle('scrolled-down', window.scrollY > 80);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { window.removeEventListener('scroll', onScroll); root.classList.remove('scrolled-down'); };
+  }, []);
+  /* phones and tablets: size the beanbag's area so the first screen holds the logo, the beanbag and its controls down
+     to Add to order, and ends just above the paragraph. Re-fitted when the width changes (turning the device) or the
+     height changes while still at the top (an in-app browser settling), never while scrolling, so the beanbag never
+     jumps when the browser's toolbar slides in and out. Then the painted floor is re-measured. */
+  useEffect(() => {
+    let t = 0, lastW = 0, lastH = 0;
     const fit = () => {
-      const stage = document.getElementById('stage'), add = document.querySelector('.hero-left .btnrow');
+      const stage = document.getElementById('stage'), add = document.querySelector('.hero-left .btnrow'), desc = document.querySelector('.hero-left .desc');
       if (!stage || !add) return;
       if (window.innerWidth > 1200) { stage.style.height = ''; stage.style.minHeight = ''; return; }
-      const bottom = add.getBoundingClientRect().bottom + window.scrollY, cur = stage.offsetHeight;
-      const target = Math.round(Math.max(230, Math.min(640, cur - (bottom + 14 - window.innerHeight))));
+      // the paragraph should start right at the bottom edge of the screen (or, without it, Add to order just fits)
+      const edge = desc ? desc.getBoundingClientRect().top + window.scrollY - 6 : add.getBoundingClientRect().bottom + window.scrollY + 14;
+      const cur = stage.offsetHeight, vh = window.innerHeight;
+      const target = Math.round(Math.max(230, Math.min(vh * 0.72, cur - (edge - vh))));
       if (Math.abs(target - cur) > 2) { stage.style.minHeight = '0'; stage.style.height = target + 'px'; }
     };
     const remeasure = () => { const h = heroRef.current; if (h) setAnchor(h.anchor()); };
     const run = (force: boolean) => {
-      if (!force && window.innerWidth === lastW) { remeasure(); return; }
-      lastW = window.innerWidth; fit(); fit(); // twice: the first pass can move things the second one corrects
+      const widthChanged = window.innerWidth !== lastW, heightAtTop = window.innerHeight !== lastH && window.scrollY < 10;
+      if (!force && !widthChanged && !heightAtTop) { remeasure(); return; }
+      lastW = window.innerWidth; lastH = window.innerHeight; fit(); fit(); // twice: the first pass can move things the second one corrects
       clearTimeout(t); t = window.setTimeout(remeasure, 160);
     };
     run(true);
@@ -144,7 +156,7 @@ export default function SiteApp() {
       <div id="progress" aria-hidden="true" />
       <header className="header" id="top">
         <a className="logo" href="#home" aria-label="Oro, back to the top" onClick={go('home')}><OroMark icon={shot} /></a>
-        <a className="contact-btn" href="#order" onClick={go('order')}>{count ? <>Your order <span className="count" aria-label={count + ' beanbags'}>{count}</span></> : 'Order now'}</a>
+        <span className="order-top"><a className="contact-btn" href="#order" onClick={go('order')}>{count ? <>Your order <span className="count" aria-label={count + ' beanbags'}>{count}</span></> : 'Order now'}</a></span>
       </header>
 
       <main>
